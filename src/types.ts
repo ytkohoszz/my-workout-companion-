@@ -23,6 +23,16 @@ export const DAYS_SHORT: readonly string[] = [
   "Вс",
 ];
 
+export const DAYS_FULL: readonly string[] = [
+  "Понедельник",
+  "Вторник",
+  "Среда",
+  "Четверг",
+  "Пятница",
+  "Суббота",
+  "Воскресенье",
+];
+
 export const REST_PRESETS: readonly number[] = [60, 90, 120, 150, 180, 210];
 
 export type ExerciseFieldKind = "повторы" | "секунды";
@@ -31,26 +41,29 @@ export interface ExerciseCatalogItem {
   name: string;
   unit: "повт." | "с";
   field: ExerciseFieldKind;
+  isCustom?: boolean;
 }
 
-export interface ProgramExerciseSpec {
+export interface PlannedExerciseItem {
+  id: string;
   name: string;
-  series?: number;
-  sets: number;
   weight: number;
+  sets: number;
   target: string;
   rest: number;
 }
 
-export interface DayProgramSpec {
-  dayNumber: number;
-  title: string;
-  restBetweenSets: number;
-  isRestDay?: boolean;
-  isVolumePullups?: boolean;
-  targetVolume?: number;
-  exercises: ProgramExerciseSpec[];
-  note: string;
+export interface WorkoutTemplate {
+  id: string;
+  name: string;
+  note?: string;
+  exercises: PlannedExerciseItem[];
+}
+
+export interface ProgramStoreData {
+  version: number;
+  catalog: ExerciseCatalogItem[];
+  templates: WorkoutTemplate[];
 }
 
 export const EXERCISES_CATALOG: readonly ExerciseCatalogItem[] = [
@@ -58,6 +71,7 @@ export const EXERCISES_CATALOG: readonly ExerciseCatalogItem[] = [
   { name: "Подтягивания", unit: "повт.", field: "повторы" },
   { name: "Высокие подтягивания", unit: "повт.", field: "повторы" },
   { name: "Брусья", unit: "повт.", field: "повторы" },
+  { name: "Жим на брусьях", unit: "повт.", field: "повторы" },
   { name: "Жим на кольцах", unit: "повт.", field: "повторы" },
   { name: "Подтягивания на кольцах", unit: "повт.", field: "повторы" },
   { name: "Подводящие к выходу на кольцах", unit: "повт.", field: "повторы" },
@@ -72,106 +86,80 @@ export const EXERCISES_CATALOG: readonly ExerciseCatalogItem[] = [
   { name: "Уголок на паралетсах", unit: "с", field: "секунды" },
 ];
 
-export const DEFAULT_SCHEDULE: Readonly<Record<number, DayProgramSpec>> = {
-  1: {
-    dayNumber: 1,
-    title: "Понедельник · Выходы силой",
-    restBetweenSets: 150,
-    exercises: [
-      { name: "Выходы силой", series: 1, sets: 4, weight: 8, target: "MAX", rest: 150 },
-      { name: "Выходы силой", series: 2, sets: 4, weight: 4, target: "MAX", rest: 150 },
-      { name: "Выходы силой", series: 3, sets: 4, weight: 0, target: "MAX", rest: 150 },
-    ],
-    note: "Разные хваты. Отдых между подходами: 2–3 мин, между сериями: 15–20 мин.",
-  },
-  2: {
-    dayNumber: 2,
-    title: "Вторник · Подтягивания с весом",
-    restBetweenSets: 210,
-    exercises: [
-      { name: "Подтягивания", series: 1, sets: 3, weight: 16, target: "3–5", rest: 210 },
-      { name: "Подтягивания", series: 2, sets: 3, weight: 16, target: "3–5", rest: 210 },
-      { name: "Подтягивания", series: 3, sets: 3, weight: 16, target: "3–5", rest: 210 },
-    ],
-    note: "3 серии по 3 подхода. Отдых между подходами: 3–4 мин, между сериями: 10–15 мин.",
-  },
-  3: {
-    dayNumber: 3,
-    title: "Среда · Ноги",
-    restBetweenSets: 120,
-    exercises: [
-      { name: "Приседания", sets: 4, weight: 16, target: "12–15", rest: 150 },
-      { name: "Выпады", sets: 4, weight: 36, target: "10–12", rest: 120 },
-      { name: "Подъёмы на носки", sets: 5, weight: 0, target: "15–20", rest: 75 },
-    ],
-    note: "Приседания с жилетом 16 кг, выпады с весом 36 кг. Заверши растяжкой.",
-  },
-  4: {
-    dayNumber: 4,
-    title: "Четверг · Объёмные подтягивания",
-    restBetweenSets: 60,
-    isVolumePullups: true,
-    targetVolume: 100,
-    exercises: [
-      { name: "Подтягивания", series: 1, sets: 6, weight: 0, target: "6–10", rest: 60 },
-      { name: "Подтягивания", series: 2, sets: 6, weight: 0, target: "6–10", rest: 60 },
-      { name: "Подтягивания", series: 3, sets: 6, weight: 0, target: "6–10", rest: 60 },
-    ],
-    note: "3 серии по 5–6 подходов без веса. Суммарно не меньше 100 повторений. Растяжка между сериями.",
-  },
-  5: {
-    dayNumber: 5,
-    title: "Пятница · Брусья",
-    restBetweenSets: 210,
-    exercises: [
-      { name: "Брусья", sets: 4, weight: 16, target: "MAX", rest: 210 },
-      { name: "Брусья", sets: 2, weight: 0, target: "MAX", rest: 210 },
-    ],
-    note: "4 подхода с весом на максимум + 2 подхода без веса на максимум. Отдых 3–4 мин.",
-  },
-  6: {
-    dayNumber: 6,
-    title: "Суббота · Кольца",
-    restBetweenSets: 150,
-    exercises: [
-      { name: "Жим на кольцах", sets: 4, weight: 0, target: "MAX", rest: 150 },
-      { name: "Подтягивания на кольцах", sets: 4, weight: 0, target: "MAX", rest: 150 },
-      { name: "Подводящие к выходу на кольцах", sets: 3, weight: 0, target: "MAX", rest: 150 },
-      { name: "Отжимания на кольцах", sets: 4, weight: 0, target: "MAX", rest: 150 },
-    ],
-    note: "Жим, подтягивания, подводящие, отжимания. Отдых 2–3 мин.",
-  },
-  7: {
-    dayNumber: 7,
-    title: "Воскресенье · Восстановление",
-    restBetweenSets: 120,
-    isRestDay: true,
-    exercises: [],
-    note: "Полное восстановление. Без тренировки.",
-  },
-};
-
-export function cloneDefaultSchedule(): Record<number, DayProgramSpec> {
-  const copy: Record<number, DayProgramSpec> = {};
-  for (let d = 1; d <= 7; d++) {
-    const src = DEFAULT_SCHEDULE[d];
-    if (!src) continue;
-    copy[d] = {
-      dayNumber: src.dayNumber,
-      title: src.title,
-      restBetweenSets: src.restBetweenSets,
-      isRestDay: Boolean(src.isRestDay),
-      isVolumePullups: Boolean(src.isVolumePullups),
-      targetVolume: src.targetVolume,
-      note: src.note,
-      exercises: src.exercises.map((e) => ({ ...e })),
-    };
-  }
-  return copy;
+export function makePlanItemId(): string {
+  return "ex_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 7);
 }
+
+export const DEFAULT_TEMPLATES: readonly WorkoutTemplate[] = [
+  {
+    id: "tpl_muscle_ups",
+    name: "Выходы силой (лесенка веса)",
+    note: "Разные хваты. Отдых между подходами: 2–3 мин, между сериями: 15–20 мин.",
+    exercises: [
+      { id: "mu_1", name: "Выходы силой", weight: 8, sets: 4, target: "MAX", rest: 150 },
+      { id: "mu_2", name: "Выходы силой", weight: 4, sets: 4, target: "MAX", rest: 150 },
+      { id: "mu_3", name: "Выходы силой", weight: 0, sets: 4, target: "MAX", rest: 150 },
+    ],
+  },
+  {
+    id: "tpl_weighted_pullups",
+    name: "Тяжёлые подтягивания с весом",
+    note: "3 серии по 3 подхода. Отдых между подходами: 3–4 мин.",
+    exercises: [
+      { id: "wp_1", name: "Подтягивания", weight: 16, sets: 9, target: "3–5", rest: 210 },
+    ],
+  },
+  {
+    id: "tpl_legs",
+    name: "Ноги (приседания и выпады)",
+    note: "Приседания с жилетом 16 кг, выпады с весом 36 кг. Заверши растяжкой.",
+    exercises: [
+      { id: "lg_1", name: "Приседания", weight: 16, sets: 4, target: "12–15", rest: 150 },
+      { id: "lg_2", name: "Выпады", weight: 36, sets: 4, target: "10–12", rest: 120 },
+      { id: "lg_3", name: "Подъёмы на носки", weight: 0, sets: 5, target: "15–20", rest: 75 },
+    ],
+  },
+  {
+    id: "tpl_volume_pullups",
+    name: "Объёмные подтягивания (база)",
+    note: "3 серии по 6 подходов без веса. Суммарно от 100 повторений.",
+    exercises: [
+      { id: "vp_1", name: "Подтягивания", weight: 0, sets: 18, target: "6–10", rest: 60 },
+    ],
+  },
+  {
+    id: "tpl_dips",
+    name: "Брусья (вес + база)",
+    note: "4 подхода с весом на максимум + 2 подхода без веса на максимум.",
+    exercises: [
+      { id: "dp_1", name: "Брусья", weight: 16, sets: 4, target: "MAX", rest: 210 },
+      { id: "dp_2", name: "Брусья", weight: 0, sets: 2, target: "MAX", rest: 210 },
+    ],
+  },
+  {
+    id: "tpl_rings",
+    name: "Гимнастические кольца",
+    note: "Жим, подтягивания, подводящие, отжимания. Отдых 2–3 мин.",
+    exercises: [
+      { id: "rg_1", name: "Жим на кольцах", weight: 0, sets: 4, target: "MAX", rest: 150 },
+      { id: "rg_2", name: "Подтягивания на кольцах", weight: 0, sets: 4, target: "MAX", rest: 150 },
+      { id: "rg_3", name: "Подводящие к выходу на кольцах", weight: 0, sets: 3, target: "MAX", rest: 150 },
+      { id: "rg_4", name: "Отжимания на кольцах", weight: 0, sets: 4, target: "MAX", rest: 150 },
+    ],
+  },
+];
 
 export function cloneDefaultCatalog(): ExerciseCatalogItem[] {
   return EXERCISES_CATALOG.map((e) => ({ ...e }));
+}
+
+export function cloneDefaultTemplates(): WorkoutTemplate[] {
+  return DEFAULT_TEMPLATES.map((t) => ({
+    id: t.id,
+    name: t.name,
+    note: t.note,
+    exercises: t.exercises.map((e) => ({ ...e })),
+  }));
 }
 
 export interface LoggedWorkoutSet {
@@ -187,7 +175,7 @@ export interface WorkoutSessionSummary {
   file: TFile;
   path: string;
   dateISO: string;
-  programDay: number;
+  programDay: number | null;
   durationMin: number | null;
   startStr: string;
   title: string;
@@ -195,6 +183,19 @@ export interface WorkoutSessionSummary {
 
 export interface HydratedWorkoutSession extends WorkoutSessionSummary {
   loggedSets: LoggedWorkoutSet[];
+}
+
+export interface ExerciseRecordEntry {
+  key: string;
+  name: string;
+  variant: string;
+  weight: number;
+  unit: "повт." | "с";
+  allTimeBest: number;
+  latestBest: number;
+  previousBest: number | null;
+  latestDateISO: string;
+  latestSessionPath: string;
 }
 
 export interface ActiveRestTimerState {
@@ -206,10 +207,13 @@ export interface ActiveRestTimerState {
 }
 
 export interface SessionDraftState {
-  selectedExKey: string;
+  selectedPlanItemId: string;
+  selectedExName: string;
   customWeight: number;
   draftReps: number;
   restDurationSec: number;
+  plannedExercises: PlannedExerciseItem[];
+  customTitle?: string;
 }
 
 export interface WorkoutPluginSettings {
@@ -217,10 +221,7 @@ export interface WorkoutPluginSettings {
   diaryFolder: string;
   soundEnabled: boolean;
   pinnedSessionPath: string;
-  selectedDay: number;
-  viewMode: "session" | "preview";
-  schedule: Record<number, DayProgramSpec>;
-  catalog: ExerciseCatalogItem[];
+  selectedDateISO: string;
   timer: ActiveRestTimerState;
   draftBySession: Record<string, SessionDraftState>;
 }
@@ -230,10 +231,7 @@ export const DEFAULT_SETTINGS: WorkoutPluginSettings = {
   diaryFolder: "Ежедневник",
   soundEnabled: true,
   pinnedSessionPath: "",
-  selectedDay: 0,
-  viewMode: "session",
-  schedule: cloneDefaultSchedule(),
-  catalog: cloneDefaultCatalog(),
+  selectedDateISO: "",
   timer: {
     sessionPath: "",
     startAt: 0,

@@ -1,64 +1,38 @@
 import { App, TFile, normalizePath } from "obsidian";
 import {
-  DEFAULT_SCHEDULE,
-  DayProgramSpec,
+  DAYS_FULL,
+  DAYS_SHORT,
   EXERCISES_CATALOG,
   ExerciseCatalogItem,
   ExerciseFieldKind,
+  ExerciseRecordEntry,
   HydratedWorkoutSession,
   LoggedWorkoutSet,
   MANUAL_HABITS_PREFIX,
+  PlannedExerciseItem,
   WORKOUT_KEYS,
   WORKOUT_TYPE_VALUE,
   WorkoutPluginSettings,
   WorkoutSessionSummary,
+  makePlanItemId,
 } from "./types";
+import type { ProgramStore } from "./program-store";
 
 const SET_LINE_REGEX =
   /-\s*\(упражнение::\s*([^)]+)\)\s*\((повторы|секунды)::\s*(\d+(?:[.,]\d+)?)\)\s*\(доп_вес_кг::\s*([\d.,]+)\)\s*\(вариант::\s*([^)]+)\)/;
 
-export function getEffectiveCatalog(
-  settings?: WorkoutPluginSettings
-): readonly ExerciseCatalogItem[] {
-  if (settings && Array.isArray(settings.catalog) && settings.catalog.length > 0) {
-    return settings.catalog;
-  }
-  return EXERCISES_CATALOG;
-}
-
-export function getEffectiveSchedule(
-  settings?: WorkoutPluginSettings
-): Readonly<Record<number, DayProgramSpec>> {
-  if (settings && settings.schedule && typeof settings.schedule === "object") {
-    return settings.schedule;
-  }
-  return DEFAULT_SCHEDULE;
-}
-
-export function getDayProgram(
-  settings: WorkoutPluginSettings,
-  dayNum: number
-): DayProgramSpec {
-  const sched = getEffectiveSchedule(settings);
-  return (
-    sched[dayNum] ??
-    DEFAULT_SCHEDULE[dayNum] ??
-    sched[1] ??
-    DEFAULT_SCHEDULE[1]!
-  );
-}
-
 export function getExerciseMeta(
   name: string,
-  settings?: WorkoutPluginSettings
+  store?: ProgramStore
 ): ExerciseCatalogItem {
   const clean = name.trim();
-  const list = getEffectiveCatalog(settings);
-  const found = list.find(
+  const fromStore = store?.findExercise(clean);
+  if (fromStore) return fromStore;
+  const fromDefault = EXERCISES_CATALOG.find(
     (e) => e.name.toLowerCase() === clean.toLowerCase()
   );
   return (
-    found ?? {
+    fromDefault ?? {
       name: clean,
       unit: "повт.",
       field: "повторы",
@@ -105,6 +79,29 @@ export function formatShortDateRu(iso: string): string {
   return `${parts[2]}.${parts[1]}`;
 }
 
+export function formatDateWithWeekdayRu(iso: string): string {
+  const wNum = isoWeekdayOf(iso);
+  const wShort = DAYS_SHORT[wNum - 1] ?? "";
+  return `${wShort}, ${formatShortDateRu(iso)}`;
+}
+
+export function formatDefaultSessionTitle(
+  dateISO: string,
+  planned: PlannedExerciseItem[]
+): string {
+  const wNum = isoWeekdayOf(dateISO);
+  const dayFull = DAYS_FULL[wNum - 1] ?? "Тренировка";
+  const uniqueNames: string[] = [];
+  for (const p of planned) {
+    if (!uniqueNames.includes(p.name)) uniqueNames.push(p.name);
+  }
+  if (uniqueNames.length === 0) {
+    return `${dayFull} · Тренировка`;
+  }
+  const summary = uniqueNames.slice(0, 2).join(" + ");
+  return `${dayFull} · ${summary}`;
+}
+
 function readStr(v: unknown): string {
   return v === null || v === undefined ? "" : String(v).trim();
 }
@@ -123,39 +120,16 @@ function extractISODate(v: unknown): string {
   return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : "";
 }
 
-export function resolveProgramDay(
-  fm: Record<string, unknown>,
-  fallbackDateISO: string,
-  settings?: WorkoutPluginSettings
-): number {
-  const sched = getEffectiveSchedule(settings);
+/**
+ * Свойство `день_программы` теперь необязательно:
+ * возвращаем число 1..7, только если оно явно записано в старой заметке, иначе null.
+ */
+export function readOptionalProgramDay(fm: Record<string, unknown>): number | null {
   const explicit = readNum(fm[WORKOUT_KEYS.programDay]);
-  if (explicit && sched[explicit]) return explicit;
-
-  const title = readStr(fm[WORKOUT_KEYS.title]);
-  if (title) {
-    for (const [k, prog] of Object.entries(sched)) {
-      if (prog && prog.title === title) return Number(k);
-    }
-    for (const [k, prog] of Object.entries(DEFAULT_SCHEDULE)) {
-      if (prog.title === title) return Number(k);
-    }
-    const low = title.toLowerCase();
-    const prefixes: Array<[string, number]> = [
-      ["понедельник", 1],
-      ["вторник", 2],
-      ["среда", 3],
-      ["четверг", 4],
-      ["пятница", 5],
-      ["суббота", 6],
-      ["воскресенье", 7],
-    ];
-    for (const [pref, dNum] of prefixes) {
-      if (low.startsWith(pref)) return dNum;
-    }
+  if (explicit && explicit >= 1 && explicit <= 7) {
+    return Math.round(explicit);
   }
-
-  return isoWeekdayOf(fallbackDateISO || todayLocalISO());
+  return null;
 }
 
 export function parseSetsFromContent(content: string): LoggedWorkoutSet[] {
@@ -193,7 +167,6 @@ export function collectWorkoutSessions(
 ): WorkoutSessionSummary[] {
   const folderPrefix =
     normalizePath(settings.workoutsFolder || "Знания").replace(/\/+$/, "") + "/";
-  const sched = getEffectiveSchedule(settings);
   const result: WorkoutSessionSummary[] = [];
 
   for (const file of app.vault.getMarkdownFiles()) {
@@ -211,14 +184,10 @@ export function collectWorkoutSessions(
     );
     const dateISO =
       (fm ? extractISODate(fm[WORKOUT_KEYS.date]) : "") || fallbackDate;
-    const programDay = resolveProgramDay(fm ?? {}, dateISO, settings);
+    const programDay = fm ? readOptionalProgramDay(fm) : null;
     const durationMin = fm ? readNum(fm[WORKOUT_KEYS.durationMin]) : null;
     const startStr = fm ? readStr(fm[WORKOUT_KEYS.start]) : "";
-    const title =
-      (fm ? readStr(fm[WORKOUT_KEYS.title]) : "") ||
-      sched[programDay]?.title ||
-      DEFAULT_SCHEDULE[programDay]?.title ||
-      file.basename;
+    const title = (fm ? readStr(fm[WORKOUT_KEYS.title]) : "") || file.basename;
 
     result.push({
       file,
@@ -254,14 +223,75 @@ export async function hydrateWorkoutSession(
   };
 }
 
+/**
+ * Превращает выполненные в сессии подходы в состав тренировки (PlannedExerciseItem[]),
+ * объединяя подходы одного упражнения с одинаковым весом.
+ * Используется для восстановления состава открытой сессии и для кнопки «Повторить прошлую».
+ */
+export function buildPlanFromLoggedSets(
+  sets: LoggedWorkoutSet[],
+  defaultRestSec = 120
+): PlannedExerciseItem[] {
+  const map = new Map<string, PlannedExerciseItem>();
+  const order: PlannedExerciseItem[] = [];
+
+  for (const s of sets) {
+    const key = `${s.name}__${s.weight}`;
+    const existing = map.get(key);
+    if (existing) {
+      existing.sets += 1;
+    } else {
+      const item: PlannedExerciseItem = {
+        id: makePlanItemId(),
+        name: s.name,
+        weight: s.weight,
+        sets: 1,
+        target: String(s.reps),
+        rest: defaultRestSec,
+      };
+      map.set(key, item);
+      order.push(item);
+    }
+  }
+  return order;
+}
+
+export async function buildPlanFromPreviousSession(
+  app: App,
+  allSessions: WorkoutSessionSummary[],
+  excludeSessionPath?: string
+): Promise<{ sourceDateISO: string; items: PlannedExerciseItem[] } | null> {
+  for (const sess of allSessions) {
+    if (excludeSessionPath && sess.path === excludeSessionPath) continue;
+    let content = "";
+    try {
+      content = await app.vault.cachedRead(sess.file);
+    } catch {
+      continue;
+    }
+    const sets = parseSetsFromContent(content);
+    if (sets.length === 0) continue;
+    return {
+      sourceDateISO: sess.dateISO,
+      items: buildPlanFromLoggedSets(sets, 120),
+    };
+  }
+  return null;
+}
+
 export interface PreviousExerciseReference {
   dateISO: string;
   sets: number[];
   best: number;
   lastReps: number;
   weight: number;
+  allTimeBestForExactWeight: number;
 }
 
+/**
+ * Ищет прошлый результат по упражнению и одновременно считает абсолютный рекорд
+ * для связки (упражнение + точный доп. вес), согласованно с логикой health.js.
+ */
 export async function findPreviousExerciseResult(
   app: App,
   allSessions: WorkoutSessionSummary[],
@@ -269,11 +299,16 @@ export async function findPreviousExerciseResult(
   exerciseName: string,
   targetWeight: number
 ): Promise<PreviousExerciseReference | null> {
-  const candidates = allSessions
-    .filter((s) => s.path !== currentSessionPath)
-    .slice(0, 25);
+  const candidates = allSessions.filter((s) => s.path !== currentSessionPath);
 
-  let fallbackOtherWeight: PreviousExerciseReference | null = null;
+  let latestExact: { dateISO: string; sets: number[]; best: number } | null = null;
+  let fallbackOtherWeight: {
+    dateISO: string;
+    sets: number[];
+    best: number;
+    weight: number;
+  } | null = null;
+  let allTimeBestExact = 0;
 
   for (const sess of candidates) {
     let content = "";
@@ -287,36 +322,154 @@ export async function findPreviousExerciseResult(
     );
     if (sets.length === 0) continue;
 
-    const exactWeightSets = sets.filter(
+    const exactSets = sets.filter(
       (s) => Math.abs(s.weight - targetWeight) < 0.01
     );
-    if (exactWeightSets.length > 0) {
-      const vals = exactWeightSets.map((s) => s.reps);
-      return {
-        dateISO: sess.dateISO,
-        sets: vals,
-        best: Math.max(...vals),
-        lastReps: vals[0] ?? 10,
-        weight: targetWeight,
-      };
-    }
-
-    if (!fallbackOtherWeight) {
-      const firstWeight = sets[0]?.weight ?? 0;
-      const sameFirst = sets
-        .filter((s) => Math.abs(s.weight - firstWeight) < 0.01)
+    if (exactSets.length > 0) {
+      const vals = exactSets.map((s) => s.reps);
+      const sessBest = Math.max(...vals);
+      if (sessBest > allTimeBestExact) {
+        allTimeBestExact = sessBest;
+      }
+      if (!latestExact) {
+        latestExact = { dateISO: sess.dateISO, sets: vals, best: sessBest };
+      }
+    } else if (!fallbackOtherWeight) {
+      const firstW = sets[0]?.weight ?? 0;
+      const sameW = sets
+        .filter((s) => Math.abs(s.weight - firstW) < 0.01)
         .map((s) => s.reps);
       fallbackOtherWeight = {
         dateISO: sess.dateISO,
-        sets: sameFirst,
-        best: Math.max(...sameFirst),
-        lastReps: sameFirst[0] ?? 10,
-        weight: firstWeight,
+        sets: sameW,
+        best: Math.max(...sameW),
+        weight: firstW,
       };
     }
   }
 
-  return fallbackOtherWeight;
+  if (latestExact) {
+    return {
+      dateISO: latestExact.dateISO,
+      sets: latestExact.sets,
+      best: latestExact.best,
+      lastReps: latestExact.sets[0] ?? 10,
+      weight: targetWeight,
+      allTimeBestForExactWeight: allTimeBestExact,
+    };
+  }
+
+  if (fallbackOtherWeight) {
+    return {
+      dateISO: fallbackOtherWeight.dateISO,
+      sets: fallbackOtherWeight.sets,
+      best: fallbackOtherWeight.best,
+      lastReps: fallbackOtherWeight.sets[0] ?? 10,
+      weight: fallbackOtherWeight.weight,
+      allTimeBestForExactWeight: 0,
+    };
+  }
+
+  return null;
+}
+
+/**
+ * Полный расчёт рекордов по всем упражнениям (включая пользовательские),
+ * совместимый с таблицей «Рекорды упражнений» в health.js:
+ * ключ группировки — [name, variant, weight].
+ */
+export async function computeAllExerciseRecords(
+  app: App,
+  allSessions: WorkoutSessionSummary[],
+  store?: ProgramStore
+): Promise<ExerciseRecordEntry[]> {
+  interface SessionGroup {
+    dateISO: string;
+    path: string;
+    best: number;
+  }
+
+  const byKey = new Map<
+    string,
+    {
+      name: string;
+      variant: string;
+      weight: number;
+      unit: "повт." | "с";
+      history: SessionGroup[];
+    }
+  >();
+
+  // allSessions уже отсортированы от новых к старым
+  for (const sess of allSessions) {
+    let content = "";
+    try {
+      content = await app.vault.cachedRead(sess.file);
+    } catch {
+      continue;
+    }
+    const sets = parseSetsFromContent(content);
+    if (sets.length === 0) continue;
+
+    const perSessionMax = new Map<
+      string,
+      { name: string; variant: string; weight: number; best: number }
+    >();
+    for (const s of sets) {
+      const key = JSON.stringify([s.name, s.variant, s.weight]);
+      const prev = perSessionMax.get(key);
+      if (!prev || s.reps > prev.best) {
+        perSessionMax.set(key, {
+          name: s.name,
+          variant: s.variant,
+          weight: s.weight,
+          best: s.reps,
+        });
+      }
+    }
+
+    for (const [key, g] of perSessionMax.entries()) {
+      let entry = byKey.get(key);
+      if (!entry) {
+        const meta = getExerciseMeta(g.name, store);
+        entry = {
+          name: g.name,
+          variant: g.variant,
+          weight: g.weight,
+          unit: meta.unit,
+          history: [],
+        };
+        byKey.set(key, entry);
+      }
+      entry.history.push({
+        dateISO: sess.dateISO,
+        path: sess.path,
+        best: g.best,
+      });
+    }
+  }
+
+  const out: ExerciseRecordEntry[] = [];
+  for (const [key, val] of byKey.entries()) {
+    const latest = val.history[0];
+    if (!latest) continue;
+    const previous = val.history[1] ?? null;
+    const allTimeBest = Math.max(...val.history.map((h) => h.best));
+    out.push({
+      key,
+      name: val.name,
+      variant: val.variant,
+      weight: val.weight,
+      unit: val.unit,
+      allTimeBest,
+      latestBest: latest.best,
+      previousBest: previous ? previous.best : null,
+      latestDateISO: latest.dateISO,
+      latestSessionPath: latest.path,
+    });
+  }
+
+  return out;
 }
 
 export async function ensureFolder(app: App, folderPath: string): Promise<void> {
@@ -402,11 +555,14 @@ export async function syncWorkoutHabitToDiary(
   );
 }
 
+/**
+ * Создаёт или открывает файл тренировки за выбранную дату (без обязательной привязки к день_программы).
+ */
 export async function createOrOpenWorkoutSessionFile(
   app: App,
   settings: WorkoutPluginSettings,
   dateISO: string,
-  program: DayProgramSpec
+  sessionTitle: string
 ): Promise<TFile> {
   const folder = normalizePath(settings.workoutsFolder || "Знания").replace(
     /\/+$/,
@@ -421,13 +577,13 @@ export async function createOrOpenWorkoutSessionFile(
   }
 
   const timeNow = currentTimeHHMM();
+  const cleanTitle = sessionTitle.trim() || `Тренировка ${dateISO}`;
   const lines = [
     "---",
     `${WORKOUT_KEYS.type}: ${WORKOUT_TYPE_VALUE}`,
     `${WORKOUT_KEYS.date}: "${dateISO}"`,
     `${WORKOUT_KEYS.start}: "${timeNow}"`,
-    `${WORKOUT_KEYS.title}: ${JSON.stringify(program.title)}`,
-    `${WORKOUT_KEYS.programDay}: ${program.dayNumber}`,
+    `${WORKOUT_KEYS.title}: ${JSON.stringify(cleanTitle)}`,
     `${WORKOUT_KEYS.durationMin}:`,
     "---",
     "",
@@ -442,19 +598,24 @@ export async function createOrOpenWorkoutSessionFile(
 export async function appendSetToWorkoutFile(
   app: App,
   settings: WorkoutPluginSettings,
+  store: ProgramStore,
   session: HydratedWorkoutSession,
   exerciseName: string,
   repsOrSec: number,
   weightKg: number,
   variant = "Основной"
 ): Promise<void> {
-  const meta = getExerciseMeta(exerciseName, settings);
+  const meta = getExerciseMeta(exerciseName, store);
   const curContent = await app.vault.read(session.file);
   const prefix =
     curContent.length > 0 && !curContent.endsWith("\n") ? "\n" : "";
   const line = `${prefix}- (упражнение:: ${exerciseName}) (${meta.field}:: ${repsOrSec}) (доп_вес_кг:: ${weightKg}) (вариант:: ${variant})\n`;
   await app.vault.append(session.file, line);
-  await syncWorkoutHabitToDiary(app, settings, session.dateISO || todayLocalISO());
+  await syncWorkoutHabitToDiary(
+    app,
+    settings,
+    session.dateISO || todayLocalISO()
+  );
 }
 
 export async function deleteSetFromWorkoutFile(
@@ -470,10 +631,6 @@ export async function deleteSetFromWorkoutFile(
   await app.vault.modify(file, lines.join("\n"));
 }
 
-/**
- * Вычисляет длительность тренировки в минутах от поля `начало: "HH:mm"` и даты сессии
- * (с корректным учётом перехода через полночь, как в health.js).
- */
 export function computeSessionDurationMinutes(
   startStr: string,
   fallbackMin: number | null,

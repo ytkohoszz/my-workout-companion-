@@ -1,5 +1,5 @@
 /* ============================================================
-   Тренировки и таймер (my-workout-companion v0.2.0)
+   Тренировки и таймер (my-workout-companion v0.3.0)
    Шкала отступов: 4 / 8 / 12 / 16 px
    Защита от .is-mobile button на iPadOS/iOS и зоны 44x44 px
    ============================================================ */
@@ -16,8 +16,8 @@
   --my-wc-hit: 36px;
 
   position: relative;
-  width: min(760px, 96vw) !important;
-  max-width: 760px !important;
+  width: min(780px, 96vw) !important;
+  max-width: 780px !important;
   max-height: 92vh !important;
   padding: var(--my-wc-s4) !important;
   border-radius: 14px;
@@ -63,7 +63,7 @@
   display: block !important;
 }
 
-/* ---------- Шапка и выбор дня ---------- */
+/* ---------- Шапка и выбор даты ---------- */
 .my-wc-header {
   display: flex;
   flex-direction: column;
@@ -91,22 +91,18 @@
   gap: var(--my-wc-s2);
 }
 
-.my-wc-days-bar,
-.my-wc-set-days-bar {
+.my-wc-days-bar {
   display: flex;
+  align-items: center;
   gap: var(--my-wc-s1);
   flex-wrap: wrap;
-}
-
-.my-wc-set-days-bar {
-  margin-bottom: 10px;
 }
 
 button.my-wc-day-btn {
   min-width: 38px !important;
   height: 32px !important;
   min-height: 32px !important;
-  padding: 0 var(--my-wc-s2) !important;
+  padding: 0 10px !important;
   border-radius: 8px !important;
   font-size: var(--my-wc-fs-sm) !important;
   font-weight: 500 !important;
@@ -123,10 +119,18 @@ button.my-wc-day-btn.is-active {
   background: color-mix(in srgb, var(--interactive-accent) 14%, var(--background-secondary)) !important;
 }
 
+.my-wc-date-input {
+  height: 32px !important;
+  min-height: 32px !important;
+  padding: 0 8px !important;
+  border-radius: 8px !important;
+  font-size: var(--my-wc-fs-xs) !important;
+}
+
 .my-wc-session-select {
   min-height: 32px;
   font-size: var(--my-wc-fs-sm);
-  max-width: 220px;
+  max-width: 240px;
 }
 
 /* ---------- Таймер отдыха ---------- */
@@ -221,13 +225,90 @@ button.my-wc-preset-btn.is-muted {
   margin-left: auto;
 }
 
-/* ---------- Ввод подхода ---------- */
+/* ---------- Конструктор состава тренировки ---------- */
 .my-wc-body {
   display: flex;
   flex-direction: column;
   gap: var(--my-wc-s3);
 }
 
+.my-wc-builder-card {
+  padding: var(--my-wc-s3) var(--my-wc-s4);
+  border-radius: 12px;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  display: flex;
+  flex-direction: column;
+  gap: var(--my-wc-s2);
+}
+
+.my-wc-builder-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--my-wc-s2);
+}
+
+.my-wc-plan-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+button.my-wc-plan-chip {
+  height: 30px !important;
+  min-height: 30px !important;
+  padding: 0 10px !important;
+  border-radius: 99px !important;
+  font-size: var(--my-wc-fs-xs) !important;
+  font-weight: 500 !important;
+  font-variant-numeric: tabular-nums;
+  background: var(--background-primary) !important;
+  border: 1px solid var(--background-modifier-border) !important;
+  color: var(--text-muted) !important;
+  box-shadow: none !important;
+  cursor: pointer;
+}
+
+button.my-wc-plan-chip.is-active {
+  color: var(--interactive-accent) !important;
+  border-color: var(--interactive-accent) !important;
+  background: color-mix(in srgb, var(--interactive-accent) 14%, var(--background-primary)) !important;
+}
+
+button.my-wc-plan-chip.is-done {
+  color: var(--color-green, #4aab80) !important;
+  border-color: color-mix(in srgb, var(--color-green, #4aab80) 45%, var(--background-modifier-border)) !important;
+}
+
+.my-wc-builder-quickbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding-top: 4px;
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+.my-wc-tpl-select {
+  height: 30px;
+  font-size: var(--my-wc-fs-xs);
+  max-width: 210px;
+}
+
+.my-wc-inline-drawer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--background-primary);
+  border: 1px solid var(--interactive-accent);
+}
+
+/* ---------- Логгер подходов ---------- */
 .my-wc-logger-card {
   padding: var(--my-wc-s3) var(--my-wc-s4);
   border-radius: 12px;
@@ -324,42 +405,7 @@ button.my-wc-primary-btn {
   cursor: pointer;
 }
 
-/* ---------- Список подходов и превью плана ---------- */
-.my-wc-plan-preview {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  width: 100%;
-  text-align: left;
-  padding: 8px 12px;
-  border-radius: 8px;
-  background: var(--background-primary);
-  border: 1px solid var(--background-modifier-border);
-  font-size: var(--my-wc-fs-xs);
-  color: var(--text-muted);
-}
-
-.my-wc-volume-box {
-  padding: var(--my-wc-s2) var(--my-wc-s3);
-  border-radius: 10px;
-  background: var(--background-secondary);
-  border: 1px solid var(--background-modifier-border);
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.my-wc-volume-text {
-  font-size: var(--my-wc-fs-sm);
-  font-weight: 500;
-}
-
-.my-wc-volume-fill {
-  height: 100%;
-  background: var(--color-green, #4aab80);
-  transition: width 0.2s ease;
-}
-
+/* ---------- Список выполненных подходов ---------- */
 .my-wc-sets-section {
   padding: var(--my-wc-s3) var(--my-wc-s4);
   border-radius: 12px;
@@ -390,6 +436,12 @@ button.my-wc-primary-btn {
   flex-wrap: wrap;
 }
 
+.my-wc-volume-summary {
+  font-size: var(--my-wc-fs-xs);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
 button.my-wc-btn {
   height: 30px !important;
   min-height: 30px !important;
@@ -402,6 +454,11 @@ button.my-wc-btn {
   color: var(--text-normal) !important;
   box-shadow: none !important;
   cursor: pointer;
+}
+
+button.my-wc-btn.is-active {
+  border-color: var(--interactive-accent) !important;
+  color: var(--interactive-accent) !important;
 }
 
 .my-wc-sets-list {
@@ -420,6 +477,11 @@ button.my-wc-btn {
   border: 1px solid var(--background-modifier-border);
   font-size: var(--my-wc-fs-sm);
   font-variant-numeric: tabular-nums;
+}
+
+.my-wc-set-pill.is-record {
+  border-color: var(--color-orange, #e5a158);
+  background: color-mix(in srgb, var(--color-orange, #e5a158) 14%, var(--background-primary));
 }
 
 button.my-wc-set-del {
@@ -444,8 +506,7 @@ button.my-wc-set-del:hover {
   background: var(--background-modifier-hover) !important;
 }
 
-.my-wc-empty-box,
-.my-wc-preview-banner {
+.my-wc-empty-box {
   padding: var(--my-wc-s4);
   border-radius: 12px;
   background: var(--background-secondary);
@@ -462,7 +523,7 @@ button.my-wc-set-del:hover {
   color: var(--text-muted);
 }
 
-/* ---------- Настройки плагина (редактор расписания и каталога) ---------- */
+/* ---------- Настройки и строки конструктора ---------- */
 .my-wc-set-card {
   padding: 12px 14px;
   border-radius: 10px;
@@ -476,9 +537,7 @@ button.my-wc-set-del:hover {
 
 .my-wc-set-subtitle {
   font-size: 0.78rem;
-  font-weight: 600;
   color: var(--text-muted);
-  margin-top: 4px;
 }
 
 .my-wc-set-ex-list {
@@ -531,13 +590,14 @@ button.my-wc-set-del:hover {
     --my-wc-hit: 44px;
   }
 
-  button.my-wc-day-btn {
-    min-width: 44px !important;
+  button.my-wc-day-btn,
+  .my-wc-date-input {
     height: 40px !important;
     min-height: 40px !important;
   }
 
-  button.my-wc-preset-btn {
+  button.my-wc-preset-btn,
+  button.my-wc-plan-chip {
     height: 38px !important;
     min-height: 38px !important;
     padding: 0 12px !important;
@@ -554,7 +614,8 @@ button.my-wc-set-del:hover {
     min-height: 46px !important;
   }
 
-  button.my-wc-btn {
+  button.my-wc-btn,
+  .my-wc-tpl-select {
     height: 38px !important;
     min-height: 38px !important;
   }
@@ -568,8 +629,7 @@ button.my-wc-set-del:hover {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .my-wc-timer-fill,
-  .my-wc-volume-fill {
+  .my-wc-timer-fill {
     transition: none !important;
   }
 }
