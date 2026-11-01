@@ -1,5 +1,5 @@
 /* ============================================================
-   Тренировки и таймер (my-workout-companion v0.1.0)
+   Тренировки и таймер (my-workout-companion v0.2.0)
    Шкала отступов: 4 / 8 / 12 / 16 px
    Защита от .is-mobile button на iPadOS/iOS и зоны 44x44 px
    ============================================================ */
@@ -46,7 +46,8 @@
   outline: none !important;
 }
 
-.my-wc-modal * {
+.my-wc-modal *,
+.my-wc-settings * {
   box-sizing: border-box;
 }
 
@@ -90,10 +91,15 @@
   gap: var(--my-wc-s2);
 }
 
-.my-wc-days-bar {
+.my-wc-days-bar,
+.my-wc-set-days-bar {
   display: flex;
   gap: var(--my-wc-s1);
   flex-wrap: wrap;
+}
+
+.my-wc-set-days-bar {
+  margin-bottom: 10px;
 }
 
 button.my-wc-day-btn {
@@ -215,7 +221,7 @@ button.my-wc-preset-btn.is-muted {
   margin-left: auto;
 }
 
-/* ---------- Ввод подхода (одной рукой) ---------- */
+/* ---------- Ввод подхода ---------- */
 .my-wc-body {
   display: flex;
   flex-direction: column;
@@ -318,7 +324,21 @@ button.my-wc-primary-btn {
   cursor: pointer;
 }
 
-/* ---------- Список выполненных подходов ---------- */
+/* ---------- Список подходов и превью плана ---------- */
+.my-wc-plan-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  text-align: left;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  font-size: var(--my-wc-fs-xs);
+  color: var(--text-muted);
+}
+
 .my-wc-volume-box {
   padding: var(--my-wc-s2) var(--my-wc-s3);
   border-radius: 10px;
@@ -440,6 +460,69 @@ button.my-wc-set-del:hover {
 .my-wc-sets-empty {
   font-size: var(--my-wc-fs-xs);
   color: var(--text-muted);
+}
+
+/* ---------- Настройки плагина (редактор расписания и каталога) ---------- */
+.my-wc-set-card {
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  margin-bottom: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.my-wc-set-subtitle {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.my-wc-set-ex-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.my-wc-set-ex-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+}
+
+.my-wc-set-ex-name {
+  flex: 1 1 160px;
+  min-width: 140px;
+}
+
+.my-wc-set-num {
+  width: 68px !important;
+  font-variant-numeric: tabular-nums;
+}
+
+.my-wc-set-target {
+  flex: 1 1 110px;
+  min-width: 90px;
+}
+
+.my-wc-set-cat-name {
+  flex: 1 1 auto;
+  font-size: 0.84rem;
+}
+
+.my-wc-set-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 4px;
 }
 
 /* ---------- iPadOS / iOS (pointer: coarse): зоны нажатия 44x44 px ---------- */

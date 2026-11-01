@@ -3,14 +3,13 @@ import type MyWorkoutCompanionPlugin from "./main";
 import {
   ActiveRestTimerState,
   DAYS_SHORT,
-  DEFAULT_SCHEDULE,
   DayProgramSpec,
-  EXERCISES_CATALOG,
   HydratedWorkoutSession,
   ProgramExerciseSpec,
   REST_PRESETS,
   SessionDraftState,
   WORKOUT_KEYS,
+  WorkoutPluginSettings,
   WorkoutSessionSummary,
 } from "./types";
 import {
@@ -22,6 +21,8 @@ import {
   deleteSetFromWorkoutFile,
   findPreviousExerciseResult,
   formatShortDateRu,
+  getDayProgram,
+  getEffectiveCatalog,
   getExerciseMeta,
   hydrateWorkoutSession,
   isoWeekdayOf,
@@ -40,7 +41,10 @@ interface UniqueProgramExercise extends ProgramExerciseSpec {
   key: string;
 }
 
-function getUniqueExercises(program: DayProgramSpec): UniqueProgramExercise[] {
+function getUniqueExercises(
+  program: DayProgramSpec,
+  settings: WorkoutPluginSettings
+): UniqueProgramExercise[] {
   const out: UniqueProgramExercise[] = [];
   const seen = new Set<string>();
   for (const e of program.exercises) {
@@ -50,14 +54,15 @@ function getUniqueExercises(program: DayProgramSpec): UniqueProgramExercise[] {
       out.push({ ...e, key });
     }
   }
+  const catalog = getEffectiveCatalog(settings);
   if (out.length === 0) {
-    for (const c of EXERCISES_CATALOG) {
+    for (const c of catalog) {
       out.push({
         name: c.name,
         sets: 4,
         weight: 0,
         target: "MAX",
-        rest: 120,
+        rest: program.restBetweenSets || 120,
         key: `${c.name}__0`,
       });
     }
@@ -82,6 +87,7 @@ export class WorkoutCompanionModal extends Modal {
   private timerStatusEl: HTMLElement | null = null;
   private timerFillEl: HTMLElement | null = null;
   private bodyEl!: HTMLElement;
+  private sessionSelectEl: HTMLSelectElement | null = null;
 
   constructor(
     app: App,
@@ -129,14 +135,29 @@ export class WorkoutCompanionModal extends Modal {
     }
     if (
       this.options.dayNumber &&
-      DEFAULT_SCHEDULE[this.options.dayNumber]
+      this.options.dayNumber >= 1 &&
+      this.options.dayNumber <= 7
     ) {
       this.plugin.settings.selectedDay = this.options.dayNumber;
+      if (!this.options.sessionPath) {
+        this.plugin.settings.viewMode = "preview";
+      }
     }
 
     void this.refreshAll().then(() => {
+      if (this.sessionSelectEl) this.sessionSelectEl.tabIndex = -1;
       this.focusSafeContainer();
-      window.setTimeout(() => this.focusSafeContainer(), 30);
+      const t1 = window.setTimeout(() => this.focusSafeContainer(), 0);
+      const t2 = window.setTimeout(() => {
+        if (this.sessionSelectEl) this.sessionSelectEl.removeAttribute("tabindex");
+        if (document.activeElement === this.sessionSelectEl) {
+          this.focusSafeContainer();
+        }
+      }, 60);
+      this.cleanups.push(
+        () => window.clearTimeout(t1),
+        () => window.clearTimeout(t2)
+      );
     });
   }
 
@@ -147,6 +168,7 @@ export class WorkoutCompanionModal extends Modal {
     this.timerTimeEl = null;
     this.timerStatusEl = null;
     this.timerFillEl = null;
+    this.sessionSelectEl = null;
     this.contentEl.empty();
   }
 
@@ -205,10 +227,8 @@ export class WorkoutCompanionModal extends Modal {
     if (this.closed || token !== this.renderToken) return;
     this.activeSession = hydrated;
 
-    if (
-      !this.plugin.settings.selectedDay ||
-      !DEFAULT_SCHEDULE[this.plugin.settings.selectedDay]
-    ) {
+    const selDay = this.plugin.settings.selectedDay;
+    if (!selDay || selDay < 1 || selDay > 7) {
       this.plugin.settings.selectedDay = hydrated
         ? hydrated.programDay
         : currentWeekday;
@@ -223,13 +243,10 @@ export class WorkoutCompanionModal extends Modal {
       hydrated && !isPreviewingOtherDay
         ? hydrated.programDay
         : this.plugin.settings.selectedDay || currentWeekday;
-    const program =
-      DEFAULT_SCHEDULE[activeDayNum] ??
-      DEFAULT_SCHEDULE[currentWeekday] ??
-      DEFAULT_SCHEDULE[1]!;
+    const program = getDayProgram(this.plugin.settings, activeDayNum);
 
     if (hydrated && !isPreviewingOtherDay) {
-      const exList = getUniqueExercises(program);
+      const exList = getUniqueExercises(program, this.plugin.settings);
       const draft = this.getDraft(hydrated.path, program, exList);
       const selectedEx =
         exList.find((e) => e.key === draft.selectedExKey) ?? exList[0];
@@ -242,7 +259,6 @@ export class WorkoutCompanionModal extends Modal {
           draft.customWeight
         );
         if (this.closed || token !== this.renderToken) return;
-        // Если в этой сессии ещё не было подходов к этому упражнению, подставляем прошлое значение
         const hasSetsInCurrent = hydrated.loggedSets.some(
           (s) => s.name === selectedEx.name
         );
@@ -267,11 +283,14 @@ export class WorkoutCompanionModal extends Modal {
     isPreviewingOtherDay: boolean
   ): void {
     this.headerEl.empty();
+    this.sessionSelectEl = null;
 
     const topRow = this.headerEl.createDiv("my-wc-top-row");
     const titleWrap = topRow.createDiv("my-wc-title-wrap");
     titleWrap.createDiv({ cls: "my-wc-title", text: program.title });
-    titleWrap.createDiv({ cls: "my-wc-subtitle", text: program.note });
+    if (program.note) {
+      titleWrap.createDiv({ cls: "my-wc-subtitle", text: program.note });
+    }
 
     const controlsRow = this.headerEl.createDiv("my-wc-controls-row");
     const daysBar = controlsRow.createDiv("my-wc-days-bar");
@@ -305,6 +324,7 @@ export class WorkoutCompanionModal extends Modal {
         cls: "dropdown my-wc-session-select",
         attr: { title: "Выбрать сессию тренировки" },
       });
+      this.sessionSelectEl = sel;
       const todayISO = todayLocalISO();
       const todayEntry = this.allSessions.find((s) => s.dateISO === todayISO);
       sel.createEl("option", {
@@ -349,6 +369,7 @@ export class WorkoutCompanionModal extends Modal {
         }
         this.plugin.requestSaveSettings();
         void this.refreshAll();
+        this.focusSafeContainer();
       };
     }
   }
@@ -500,6 +521,17 @@ export class WorkoutCompanionModal extends Modal {
 
     if (!this.activeSession || isPreviewingOtherDay) {
       const startBox = this.bodyEl.createDiv("my-wc-empty-box");
+      if (program.exercises.length > 0) {
+        const planList = startBox.createDiv("my-wc-plan-preview");
+        for (const ex of program.exercises) {
+          const wTxt = ex.weight > 0 ? `+${ex.weight} кг` : "свой вес";
+          const serTxt = ex.series ? `Серия ${ex.series}: ` : "";
+          planList.createDiv({
+            cls: "my-wc-plan-line",
+            text: `${serTxt}${ex.name} — ${ex.sets} подх. × ${ex.target} (${wTxt}, отдых ${ex.rest} с)`,
+          });
+        }
+      }
       const startBtn = startBox.createEl("button", {
         cls: "mod-cta my-wc-primary-btn",
         text: "▶ Начать тренировку (создать сессию за сегодня)",
@@ -533,13 +565,29 @@ export class WorkoutCompanionModal extends Modal {
     }
 
     const session = this.activeSession;
-    const exList = getUniqueExercises(program);
+    const exList = getUniqueExercises(program, this.plugin.settings);
+    const catalog = getEffectiveCatalog(this.plugin.settings);
+
+    // Если в расписании дня не все упражнения из каталога, добавляем остальные в конец списка
+    const existingNames = new Set(exList.map((e) => e.name));
+    for (const c of catalog) {
+      if (!existingNames.has(c.name)) {
+        exList.push({
+          name: c.name,
+          sets: 4,
+          weight: 0,
+          target: "MAX",
+          rest: program.restBetweenSets || 120,
+          key: `${c.name}__0`,
+        });
+      }
+    }
+
     const draft = this.getDraft(session.path, program, exList);
     const selectedEx =
       exList.find((e) => e.key === draft.selectedExKey) ?? exList[0]!;
-    const exMeta = getExerciseMeta(selectedEx.name);
+    const exMeta = getExerciseMeta(selectedEx.name, this.plugin.settings);
 
-    // Карточка быстрого ввода подхода (одной рукой на iPad)
     const loggerCard = this.bodyEl.createDiv("my-wc-logger-card");
 
     const exRow = loggerCard.createDiv("my-wc-ex-row");
@@ -565,6 +613,7 @@ export class WorkoutCompanionModal extends Modal {
       }
       this.plugin.requestSaveSettings();
       void this.refreshAll();
+      this.focusSafeContainer();
     };
 
     if (this.prevRef) {
@@ -576,10 +625,9 @@ export class WorkoutCompanionModal extends Modal {
       );
     }
 
-    // Блок 2: Степперы «Доп. вес (кг)» и «Повторения / Секунды» с крупными кнопками 44px
     const steppersGrid = loggerCard.createDiv("my-wc-steppers-grid");
 
-    // 1. Вес
+    // 1. Доп. вес (кг)
     const weightBox = steppersGrid.createDiv("my-wc-stepper-box");
     weightBox.createDiv({ cls: "my-wc-stepper-label", text: "Доп. вес (кг)" });
     const wControls = weightBox.createDiv("my-wc-stepper-controls");
@@ -617,7 +665,7 @@ export class WorkoutCompanionModal extends Modal {
       wInput.value = String(clean);
       this.plugin.requestSaveSettings();
     };
-    wMinusBtn.onclick = () => applyWeight(( Number(wInput.value) || 0) - 2);
+    wMinusBtn.onclick = () => applyWeight((Number(wInput.value) || 0) - 2);
     wPlusBtn.onclick = () => applyWeight((Number(wInput.value) || 0) + 2);
     wZeroBtn.onclick = () => applyWeight(0);
     wInput.oninput = () => {
@@ -733,7 +781,6 @@ export class WorkoutCompanionModal extends Modal {
 
     submitBtn.onclick = () => void doSubmitSet();
 
-    // Прогресс объёмных подтягиваний по четвергам (цель 100)
     if (program.isVolumePullups) {
       const pullupsSum = session.loggedSets
         .filter((s) => s.name === "Подтягивания")
@@ -751,7 +798,6 @@ export class WorkoutCompanionModal extends Modal {
       vFill.style.width = `${pct}%`;
     }
 
-    // Список выполненных за сегодня подходов + удаление ошибочного подхода + завершение тренировки
     const setsSection = this.bodyEl.createDiv("my-wc-sets-section");
     const setsHead = setsSection.createDiv("my-wc-sets-head");
     setsHead.createSpan({
@@ -773,7 +819,7 @@ export class WorkoutCompanionModal extends Modal {
     const finishBtn = sessionActions.createEl("button", {
       cls: "my-wc-btn",
       text: session.durationMin
-        ? `✓ Завершена (${session.durationMin} мин)`
+        ? `🔄 Обновить время (${session.durationMin} мин)`
         : "✓ Завершить тренировку",
       attr: { type: "button" },
     });
@@ -782,7 +828,8 @@ export class WorkoutCompanionModal extends Modal {
       try {
         const dur = computeSessionDurationMinutes(
           session.startStr,
-          session.durationMin
+          session.durationMin,
+          session.dateISO || todayISO
         );
         await this.app.fileManager.processFrontMatter(
           session.file,
@@ -817,7 +864,7 @@ export class WorkoutCompanionModal extends Modal {
     } else {
       const pillsList = setsSection.createDiv("my-wc-sets-list");
       session.loggedSets.forEach((s, idx) => {
-        const meta = getExerciseMeta(s.name);
+        const meta = getExerciseMeta(s.name, this.plugin.settings);
         const wText = s.weight > 0 ? ` +${s.weight} кг` : "";
         const pill = pillsList.createDiv("my-wc-set-pill");
         pill.createSpan({

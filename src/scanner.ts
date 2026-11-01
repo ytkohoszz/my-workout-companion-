@@ -17,14 +17,49 @@ import {
 const SET_LINE_REGEX =
   /-\s*\(упражнение::\s*([^)]+)\)\s*\((повторы|секунды)::\s*(\d+(?:[.,]\d+)?)\)\s*\(доп_вес_кг::\s*([\d.,]+)\)\s*\(вариант::\s*([^)]+)\)/;
 
-const CATALOG_MAP = new Map<string, ExerciseCatalogItem>(
-  EXERCISES_CATALOG.map((e) => [e.name, e])
-);
+export function getEffectiveCatalog(
+  settings?: WorkoutPluginSettings
+): readonly ExerciseCatalogItem[] {
+  if (settings && Array.isArray(settings.catalog) && settings.catalog.length > 0) {
+    return settings.catalog;
+  }
+  return EXERCISES_CATALOG;
+}
 
-export function getExerciseMeta(name: string): ExerciseCatalogItem {
+export function getEffectiveSchedule(
+  settings?: WorkoutPluginSettings
+): Readonly<Record<number, DayProgramSpec>> {
+  if (settings && settings.schedule && typeof settings.schedule === "object") {
+    return settings.schedule;
+  }
+  return DEFAULT_SCHEDULE;
+}
+
+export function getDayProgram(
+  settings: WorkoutPluginSettings,
+  dayNum: number
+): DayProgramSpec {
+  const sched = getEffectiveSchedule(settings);
   return (
-    CATALOG_MAP.get(name) ?? {
-      name,
+    sched[dayNum] ??
+    DEFAULT_SCHEDULE[dayNum] ??
+    sched[1] ??
+    DEFAULT_SCHEDULE[1]!
+  );
+}
+
+export function getExerciseMeta(
+  name: string,
+  settings?: WorkoutPluginSettings
+): ExerciseCatalogItem {
+  const clean = name.trim();
+  const list = getEffectiveCatalog(settings);
+  const found = list.find(
+    (e) => e.name.toLowerCase() === clean.toLowerCase()
+  );
+  return (
+    found ?? {
+      name: clean,
       unit: "повт.",
       field: "повторы",
     }
@@ -90,13 +125,18 @@ function extractISODate(v: unknown): string {
 
 export function resolveProgramDay(
   fm: Record<string, unknown>,
-  fallbackDateISO: string
+  fallbackDateISO: string,
+  settings?: WorkoutPluginSettings
 ): number {
+  const sched = getEffectiveSchedule(settings);
   const explicit = readNum(fm[WORKOUT_KEYS.programDay]);
-  if (explicit && DEFAULT_SCHEDULE[explicit]) return explicit;
+  if (explicit && sched[explicit]) return explicit;
 
   const title = readStr(fm[WORKOUT_KEYS.title]);
   if (title) {
+    for (const [k, prog] of Object.entries(sched)) {
+      if (prog && prog.title === title) return Number(k);
+    }
     for (const [k, prog] of Object.entries(DEFAULT_SCHEDULE)) {
       if (prog.title === title) return Number(k);
     }
@@ -153,13 +193,17 @@ export function collectWorkoutSessions(
 ): WorkoutSessionSummary[] {
   const folderPrefix =
     normalizePath(settings.workoutsFolder || "Знания").replace(/\/+$/, "") + "/";
+  const sched = getEffectiveSchedule(settings);
   const result: WorkoutSessionSummary[] = [];
 
   for (const file of app.vault.getMarkdownFiles()) {
     if (!file.path.startsWith(folderPrefix)) continue;
     const fm = app.metadataCache.getFileCache(file)?.frontmatter;
-    const isWorkoutByFm = fm && readStr(fm[WORKOUT_KEYS.type]) === WORKOUT_TYPE_VALUE;
-    const isWorkoutByName = /^Тренировка\s+\d{4}-\d{2}-\d{2}$/i.test(file.basename);
+    const isWorkoutByFm =
+      fm && readStr(fm[WORKOUT_KEYS.type]) === WORKOUT_TYPE_VALUE;
+    const isWorkoutByName = /^Тренировка\s+\d{4}-\d{2}-\d{2}$/i.test(
+      file.basename
+    );
     if (!isWorkoutByFm && !isWorkoutByName) continue;
 
     const fallbackDate = extractISODate(
@@ -167,11 +211,12 @@ export function collectWorkoutSessions(
     );
     const dateISO =
       (fm ? extractISODate(fm[WORKOUT_KEYS.date]) : "") || fallbackDate;
-    const programDay = resolveProgramDay(fm ?? {}, dateISO);
+    const programDay = resolveProgramDay(fm ?? {}, dateISO, settings);
     const durationMin = fm ? readNum(fm[WORKOUT_KEYS.durationMin]) : null;
     const startStr = fm ? readStr(fm[WORKOUT_KEYS.start]) : "";
     const title =
       (fm ? readStr(fm[WORKOUT_KEYS.title]) : "") ||
+      sched[programDay]?.title ||
       DEFAULT_SCHEDULE[programDay]?.title ||
       file.basename;
 
@@ -217,10 +262,6 @@ export interface PreviousExerciseReference {
   weight: number;
 }
 
-/**
- * Находит последнюю прошлую тренировку, где выполнялось это упражнение (с тем же весом или вообще),
- * чтобы предзаполнить поле повторений и показать ориентир.
- */
 export async function findPreviousExerciseResult(
   app: App,
   allSessions: WorkoutSessionSummary[],
@@ -310,11 +351,6 @@ export function clearManualHabitOverrideForDate(
   }
 }
 
-/**
- * Синхронизирует `тренировка: true` в заметку ежедневника по правилу health.js:
- * сначала ищет `Ежедневник/YYYY-MM-DD.md`, затем любую заметку в папке `Ежедневник` с `дата: YYYY-MM-DD`.
- * Если заметки за эту дату ещё нет — создаёт её.
- */
 export async function syncWorkoutHabitToDiary(
   app: App,
   settings: WorkoutPluginSettings,
@@ -412,7 +448,7 @@ export async function appendSetToWorkoutFile(
   weightKg: number,
   variant = "Основной"
 ): Promise<void> {
-  const meta = getExerciseMeta(exerciseName);
+  const meta = getExerciseMeta(exerciseName, settings);
   const curContent = await app.vault.read(session.file);
   const prefix =
     curContent.length > 0 && !curContent.endsWith("\n") ? "\n" : "";
@@ -434,15 +470,39 @@ export async function deleteSetFromWorkoutFile(
   await app.vault.modify(file, lines.join("\n"));
 }
 
+/**
+ * Вычисляет длительность тренировки в минутах от поля `начало: "HH:mm"` и даты сессии
+ * (с корректным учётом перехода через полночь, как в health.js).
+ */
 export function computeSessionDurationMinutes(
   startStr: string,
-  fallbackMin: number | null
+  fallbackMin: number | null,
+  sessionDateISO?: string
 ): number {
   if (/^\d{2}:\d{2}$/.test(startStr)) {
     const hh = Number(startStr.slice(0, 2));
     const mm = Number(startStr.slice(3, 5));
-    if (Number.isInteger(hh) && Number.isInteger(mm)) {
+    if (
+      Number.isInteger(hh) &&
+      hh >= 0 &&
+      hh <= 23 &&
+      Number.isInteger(mm) &&
+      mm >= 0 &&
+      mm <= 59
+    ) {
       const now = new Date();
+      if (sessionDateISO && /^\d{4}-\d{2}-\d{2}$/.test(sessionDateISO)) {
+        const parts = sessionDateISO.split("-").map(Number);
+        const y = parts[0];
+        const m = parts[1];
+        const d = parts[2];
+        if (y && m && d) {
+          const startDt = new Date(y, m - 1, d, hh, mm, 0, 0);
+          let diffMin = Math.round((now.getTime() - startDt.getTime()) / 60000);
+          if (diffMin < 0) diffMin += 1440;
+          if (diffMin > 0 && diffMin <= 600) return diffMin;
+        }
+      }
       const nowTotal = now.getHours() * 60 + now.getMinutes();
       const startTotal = hh * 60 + mm;
       let diff = nowTotal - startTotal;

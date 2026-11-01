@@ -151,6 +151,29 @@ export const DEFAULT_SCHEDULE: Readonly<Record<number, DayProgramSpec>> = {
   },
 };
 
+export function cloneDefaultSchedule(): Record<number, DayProgramSpec> {
+  const copy: Record<number, DayProgramSpec> = {};
+  for (let d = 1; d <= 7; d++) {
+    const src = DEFAULT_SCHEDULE[d];
+    if (!src) continue;
+    copy[d] = {
+      dayNumber: src.dayNumber,
+      title: src.title,
+      restBetweenSets: src.restBetweenSets,
+      isRestDay: Boolean(src.isRestDay),
+      isVolumePullups: Boolean(src.isVolumePullups),
+      targetVolume: src.targetVolume,
+      note: src.note,
+      exercises: src.exercises.map((e) => ({ ...e })),
+    };
+  }
+  return copy;
+}
+
+export function cloneDefaultCatalog(): ExerciseCatalogItem[] {
+  return EXERCISES_CATALOG.map((e) => ({ ...e }));
+}
+
 export interface LoggedWorkoutSet {
   lineIndex: number;
   name: string;
@@ -196,6 +219,8 @@ export interface WorkoutPluginSettings {
   pinnedSessionPath: string;
   selectedDay: number;
   viewMode: "session" | "preview";
+  schedule: Record<number, DayProgramSpec>;
+  catalog: ExerciseCatalogItem[];
   timer: ActiveRestTimerState;
   draftBySession: Record<string, SessionDraftState>;
 }
@@ -207,6 +232,8 @@ export const DEFAULT_SETTINGS: WorkoutPluginSettings = {
   pinnedSessionPath: "",
   selectedDay: 0,
   viewMode: "session",
+  schedule: cloneDefaultSchedule(),
+  catalog: cloneDefaultCatalog(),
   timer: {
     sessionPath: "",
     startAt: 0,

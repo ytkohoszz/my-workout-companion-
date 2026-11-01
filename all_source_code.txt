@@ -1,0 +1,3464 @@
+=== FILE: ./AGENTS.md ===
+# Obsidian community plugin
+
+## Project overview
+
+- Target: Obsidian Community Plugin (TypeScript → bundled JavaScript).
+- Entry point: `src/main.ts` compiled to `main.js` and loaded by Obsidian.
+- Required release artifacts: `main.js`, `manifest.json`, and optional `styles.css`.
+
+## Environment & tooling
+
+- Node.js: use current LTS (Node 18+ recommended).
+- **Package manager: npm** (required for this sample - `package.json` defines npm scripts and dependencies).
+- **Bundler: esbuild** (required for this sample - `esbuild.config.mjs` and build scripts depend on it). Alternative bundlers like Rollup or webpack are acceptable for other projects if they bundle all external dependencies into `main.js`.
+- Types: `obsidian` type definitions.
+
+**Note**: This sample project has specific technical dependencies on npm and esbuild. If you're creating a plugin from scratch, you can choose different tools, but you'll need to replace the build configuration accordingly.
+
+### Install
+
+```bash
+npm install
+```
+
+### Dev (watch)
+
+```bash
+npm run dev
+```
+
+### Production build
+
+```bash
+npm run build
+```
+
+## Linting
+
+- ESLint is preconfigured with `eslint-plugin-obsidianmd` for Obsidian-specific rules.
+- Run `npm run lint` to lint the project.
+- A GitHub Action automatically lints every commit on all branches.
+
+## File & folder conventions
+
+- **Organize code into multiple files**: Split functionality across separate modules rather than putting everything in `main.ts`.
+- Source lives in `src/`. Keep `main.ts` small and focused on plugin lifecycle (loading, unloading, registering commands).
+- **Example file structure**:
+    ```
+    src/
+      main.ts           # Plugin entry point, lifecycle management
+      settings.ts       # Settings interface and defaults
+      commands/         # Command implementations
+        command1.ts
+        command2.ts
+      ui/              # UI components, modals, views
+        modal.ts
+        view.ts
+      utils/           # Utility functions, helpers
+        helpers.ts
+        constants.ts
+      types.ts         # TypeScript interfaces and types
+    ```
+- **Do not commit build artifacts**: Never commit `node_modules/`, `main.js`, or other generated files to version control.
+- Keep the plugin small. Avoid large dependencies. Prefer browser-compatible packages.
+- Generated output should be placed at the plugin root or `dist/` depending on your build setup. Release artifacts must end up at the top level of the plugin folder in the vault (`main.js`, `manifest.json`, `styles.css`).
+
+## Manifest rules (`manifest.json`)
+
+- Must include (non-exhaustive):
+    - `id` (plugin ID; for local dev it should match the folder name)
+    - `name`
+    - `version` (Semantic Versioning `x.y.z`)
+    - `minAppVersion`
+    - `description`
+    - `isDesktopOnly` (boolean)
+    - Optional: `author`, `authorUrl`, `fundingUrl` (string or map)
+- Never change `id` after release. Treat it as stable API.
+- Keep `minAppVersion` accurate when using newer APIs.
+- Canonical requirements are coded here: https://github.com/obsidianmd/obsidian-releases/blob/master/.github/workflows/validate-plugin-entry.yml
+
+## Testing
+
+- Manual install for testing: copy `main.js`, `manifest.json`, `styles.css` (if any) to:
+    ```
+    <Vault>/.obsidian/plugins/<plugin-id>/
+    ```
+- Reload Obsidian and enable the plugin in **Settings → Community plugins**.
+
+## Commands & settings
+
+- Any user-facing commands should be added via `this.addCommand(...)`.
+- If the plugin has configuration, provide a settings tab and sensible defaults.
+- Persist settings using `this.loadData()` / `this.saveData()`.
+- Use stable command IDs; avoid renaming once released.
+
+## Versioning & releases
+
+- Bump `version` in `manifest.json` (SemVer) and update `versions.json` to map plugin version → minimum app version.
+- Create a GitHub release whose tag exactly matches `manifest.json`'s `version`. Do not use a leading `v`.
+- Attach `manifest.json`, `main.js`, and `styles.css` (if present) to the release as individual assets.
+- After the initial release, follow the process to add/update your plugin in the community catalog as required.
+
+## Security, privacy, and compliance
+
+Follow Obsidian's **Developer Policies** and **Plugin Guidelines**. In particular:
+
+- Default to local/offline operation. Only make network requests when essential to the feature.
+- No hidden telemetry. If you collect optional analytics or call third-party services, require explicit opt-in and document clearly in `README.md` and in settings.
+- Never execute remote code, fetch and eval scripts, or auto-update plugin code outside of normal releases.
+- Minimize scope: read/write only what's necessary inside the vault. Do not access files outside the vault.
+- Clearly disclose any external services used, data sent, and risks.
+- Respect user privacy. Do not collect vault contents, filenames, or personal information unless absolutely necessary and explicitly consented.
+- Avoid deceptive patterns, ads, or spammy notifications.
+- Register and clean up all DOM, app, and interval listeners using the provided `register*` helpers so the plugin unloads safely.
+
+## UX & copy guidelines (for UI text, commands, settings)
+
+- Prefer sentence case for headings, buttons, and titles.
+- Use clear, action-oriented imperatives in step-by-step copy.
+- Use **bold** to indicate literal UI labels. Prefer "select" for interactions.
+- Use arrow notation for navigation: **Settings → Community plugins**.
+- Keep in-app strings short, consistent, and free of jargon.
+
+## Performance
+
+- Keep startup light. Defer heavy work until needed.
+- Avoid long-running tasks during `onload`; use lazy initialization.
+- Batch disk access and avoid excessive vault scans.
+- Debounce/throttle expensive operations in response to file system events.
+
+## Coding conventions
+
+- TypeScript with `"strict": true` preferred.
+- **Keep `main.ts` minimal**: Focus only on plugin lifecycle (onload, onunload, addCommand calls). Delegate all feature logic to separate modules.
+- **Split large files**: If any file exceeds ~200-300 lines, consider breaking it into smaller, focused modules.
+- **Use clear module boundaries**: Each file should have a single, well-defined responsibility.
+- Bundle everything into `main.js` (no unbundled runtime deps).
+- Avoid Node/Electron APIs if you want mobile compatibility; set `isDesktopOnly` accordingly.
+- Prefer `async/await` over promise chains; handle errors gracefully.
+
+## Mobile
+
+- Where feasible, test on iOS and Android.
+- Don't assume desktop-only behavior unless `isDesktopOnly` is `true`.
+- Avoid large in-memory structures; be mindful of memory and storage constraints.
+
+## Agent do/don't
+
+**Do**
+
+- Add commands with stable IDs (don't rename once released).
+- Provide defaults and validation in settings.
+- Write idempotent code paths so reload/unload doesn't leak listeners or intervals.
+- Use `this.register*` helpers for everything that needs cleanup.
+
+**Don't**
+
+- Introduce network calls without an obvious user-facing reason and documentation.
+- Ship features that require cloud services without clear disclosure and explicit opt-in.
+- Store or transmit vault contents unless essential and consented.
+
+## Common tasks
+
+### Organize code across multiple files
+
+**main.ts** (minimal, lifecycle only):
+
+```ts
+import { Plugin } from 'obsidian';
+import { MySettings, DEFAULT_SETTINGS } from './settings';
+import { registerCommands } from './commands';
+
+export default class MyPlugin extends Plugin {
+	settings!: MySettings;
+
+	async onload() {
+		this.settings = Object.assign(
+			{},
+			DEFAULT_SETTINGS,
+			(await this.loadData()) as Partial<MySettings>,
+		);
+		registerCommands(this);
+	}
+}
+```
+
+**settings.ts**:
+
+```ts
+export interface MySettings {
+	enabled: boolean;
+	apiKey: string;
+}
+
+export const DEFAULT_SETTINGS: MySettings = {
+	enabled: true,
+	apiKey: '',
+};
+```
+
+**commands/index.ts**:
+
+```ts
+import { Plugin } from 'obsidian';
+import { doSomething } from './my-command';
+
+export function registerCommands(plugin: Plugin) {
+	plugin.addCommand({
+		id: 'do-something',
+		name: 'Do something',
+		callback: () => doSomething(plugin),
+	});
+}
+```
+
+### Add a command
+
+```ts
+this.addCommand({
+	id: 'your-command-id',
+	name: 'Do the thing',
+	callback: () => this.doTheThing(),
+});
+```
+
+### Persist settings
+
+```ts
+interface MySettings { enabled: boolean }
+const DEFAULT_SETTINGS: MySettings = { enabled: true };
+
+async onload() {
+  this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData() as Partial<MySettings>);
+  await this.saveData(this.settings);
+}
+```
+
+### Register listeners safely
+
+```ts
+this.registerEvent(
+	this.app.workspace.on('file-open', (f) => {
+		/* ... */
+	}),
+);
+this.registerDomEvent(activeWindow, 'resize', () => {
+	/* ... */
+});
+this.registerInterval(
+	window.setInterval(() => {
+		/* ... */
+	}, 1000),
+);
+```
+
+## Troubleshooting
+
+- Plugin doesn't load after build: ensure `main.js` and `manifest.json` are at the top level of the plugin folder under `<Vault>/.obsidian/plugins/<plugin-id>/`.
+- Build issues: if `main.js` is missing, run `npm run build` or `npm run dev` to compile your TypeScript source code.
+- Commands not appearing: verify `addCommand` runs after `onload` and IDs are unique.
+- Settings not persisting: ensure `loadData`/`saveData` are awaited and you re-render the UI after changes.
+- Mobile-only issues: confirm you're not using desktop-only APIs; check `isDesktopOnly` and adjust.
+
+## References
+
+- Obsidian sample plugin: https://github.com/obsidianmd/obsidian-sample-plugin
+- API documentation: https://docs.obsidian.md
+- Developer policies: https://docs.obsidian.md/Developer+policies
+- Plugin guidelines: https://docs.obsidian.md/Plugins/Releasing/Plugin+guidelines
+- Style guide: https://help.obsidian.md/style-guide
+
+
+=== FILE: ./manifest.json ===
+{
+	"id": "my-workout-companion",
+	"name": "Тренировки и таймер",
+	"version": "0.1.0",
+	"minAppVersion": "1.5.0",
+	"description": "Рабочий терминал тренировки и неубиваемый таймер отдыха для системы «Здоровье»",
+	"author": "Mersinho",
+	"isDesktopOnly": false
+}
+
+=== FILE: ./styles.css ===
+/* ============================================================
+   Тренировки и таймер (my-workout-companion v0.1.0)
+   Шкала отступов: 4 / 8 / 12 / 16 px
+   Защита от .is-mobile button на iPadOS/iOS и зоны 44x44 px
+   ============================================================ */
+
+.modal.my-wc-modal-container {
+  --my-wc-s1: 4px;
+  --my-wc-s2: 8px;
+  --my-wc-s3: 12px;
+  --my-wc-s4: 16px;
+  --my-wc-fs-lg: 1.02rem;
+  --my-wc-fs: 0.88rem;
+  --my-wc-fs-sm: 0.78rem;
+  --my-wc-fs-xs: 0.72rem;
+  --my-wc-hit: 36px;
+
+  position: relative;
+  width: min(760px, 96vw) !important;
+  max-width: 760px !important;
+  max-height: 92vh !important;
+  padding: var(--my-wc-s4) !important;
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal.my-wc-modal-container > .modal-close-button {
+  top: var(--my-wc-s4);
+  right: var(--my-wc-s3);
+  z-index: 10;
+}
+
+.my-wc-modal {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  gap: var(--my-wc-s3);
+  outline: none !important;
+  overflow-y: auto;
+}
+
+.my-wc-modal:focus,
+.my-wc-modal:focus-visible {
+  outline: none !important;
+}
+
+.my-wc-modal * {
+  box-sizing: border-box;
+}
+
+.my-wc-modal svg.svg-icon {
+  width: 16px !important;
+  height: 16px !important;
+  min-width: 16px !important;
+  min-height: 16px !important;
+  flex-shrink: 0 !important;
+  stroke: currentColor !important;
+  stroke-width: 2px !important;
+  fill: none !important;
+  display: block !important;
+}
+
+/* ---------- Шапка и выбор дня ---------- */
+.my-wc-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--my-wc-s2);
+  padding-right: 36px;
+}
+
+.my-wc-title {
+  font-size: var(--my-wc-fs-lg);
+  font-weight: 600;
+  color: var(--text-normal);
+}
+
+.my-wc-subtitle {
+  font-size: var(--my-wc-fs-xs);
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.my-wc-controls-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--my-wc-s2);
+}
+
+.my-wc-days-bar {
+  display: flex;
+  gap: var(--my-wc-s1);
+  flex-wrap: wrap;
+}
+
+button.my-wc-day-btn {
+  min-width: 38px !important;
+  height: 32px !important;
+  min-height: 32px !important;
+  padding: 0 var(--my-wc-s2) !important;
+  border-radius: 8px !important;
+  font-size: var(--my-wc-fs-sm) !important;
+  font-weight: 500 !important;
+  background: var(--background-secondary) !important;
+  border: 1px solid var(--background-modifier-border) !important;
+  color: var(--text-muted) !important;
+  box-shadow: none !important;
+  cursor: pointer;
+}
+
+button.my-wc-day-btn.is-active {
+  color: var(--interactive-accent) !important;
+  border-color: var(--interactive-accent) !important;
+  background: color-mix(in srgb, var(--interactive-accent) 14%, var(--background-secondary)) !important;
+}
+
+.my-wc-session-select {
+  min-height: 32px;
+  font-size: var(--my-wc-fs-sm);
+  max-width: 220px;
+}
+
+/* ---------- Таймер отдыха ---------- */
+.my-wc-timer-card {
+  padding: var(--my-wc-s3) var(--my-wc-s4);
+  border-radius: 12px;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  display: flex;
+  flex-direction: column;
+  gap: var(--my-wc-s2);
+}
+
+.my-wc-timer-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--my-wc-s3);
+}
+
+.my-wc-timer-label {
+  font-size: var(--my-wc-fs-sm);
+  font-weight: 600;
+  color: var(--text-normal);
+}
+
+.my-wc-timer-status {
+  font-size: var(--my-wc-fs-xs);
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.my-wc-timer-digits {
+  font-size: 1.85rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  color: var(--text-normal);
+}
+
+.my-wc-timer-digits.is-running {
+  color: var(--color-orange, #e5a158);
+}
+
+.my-wc-timer-digits.is-done {
+  color: var(--color-green, #4aab80);
+}
+
+.my-wc-timer-track {
+  height: 6px;
+  border-radius: 99px;
+  background: var(--background-modifier-border);
+  overflow: hidden;
+}
+
+.my-wc-timer-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--color-orange, #e5a158);
+  transition: width 0.22s linear;
+}
+
+.my-wc-timer-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--my-wc-s1);
+  padding-top: 2px;
+}
+
+button.my-wc-preset-btn {
+  height: 30px !important;
+  min-height: 30px !important;
+  padding: 0 10px !important;
+  border-radius: 7px !important;
+  font-size: var(--my-wc-fs-xs) !important;
+  font-weight: 500 !important;
+  background: var(--background-primary) !important;
+  border: 1px solid var(--background-modifier-border) !important;
+  color: var(--text-normal) !important;
+  box-shadow: none !important;
+  cursor: pointer;
+}
+
+button.my-wc-preset-btn.is-active {
+  border-color: var(--interactive-accent) !important;
+  color: var(--interactive-accent) !important;
+  background: color-mix(in srgb, var(--interactive-accent) 12%, var(--background-primary)) !important;
+}
+
+button.my-wc-preset-btn.is-muted {
+  color: var(--text-muted) !important;
+  margin-left: auto;
+}
+
+/* ---------- Ввод подхода (одной рукой) ---------- */
+.my-wc-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--my-wc-s3);
+}
+
+.my-wc-logger-card {
+  padding: var(--my-wc-s3) var(--my-wc-s4);
+  border-radius: 12px;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  display: flex;
+  flex-direction: column;
+  gap: var(--my-wc-s3);
+}
+
+.my-wc-ex-select {
+  width: 100%;
+  min-height: var(--my-wc-hit);
+  font-size: var(--my-wc-fs);
+  font-weight: 500;
+}
+
+.my-wc-prev-ref {
+  font-size: var(--my-wc-fs-xs);
+  color: var(--text-muted);
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  font-variant-numeric: tabular-nums;
+}
+
+.my-wc-steppers-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  gap: var(--my-wc-s3);
+}
+
+.my-wc-stepper-box {
+  display: flex;
+  flex-direction: column;
+  gap: var(--my-wc-s1);
+  padding: var(--my-wc-s2) var(--my-wc-s3);
+  border-radius: 10px;
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+}
+
+.my-wc-stepper-label {
+  font-size: var(--my-wc-fs-xs);
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.my-wc-stepper-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--my-wc-s1);
+}
+
+button.my-wc-step-btn {
+  min-width: 40px !important;
+  height: var(--my-wc-hit) !important;
+  min-height: var(--my-wc-hit) !important;
+  padding: 0 var(--my-wc-s2) !important;
+  border-radius: 8px !important;
+  font-size: var(--my-wc-fs-sm) !important;
+  font-weight: 600 !important;
+  background: var(--background-secondary) !important;
+  border: 1px solid var(--background-modifier-border) !important;
+  color: var(--text-normal) !important;
+  box-shadow: none !important;
+  cursor: pointer;
+}
+
+button.my-wc-step-btn.is-subtle {
+  color: var(--text-muted) !important;
+  font-weight: 500 !important;
+}
+
+.my-wc-step-input {
+  flex: 1 1 60px;
+  min-width: 0;
+  height: var(--my-wc-hit) !important;
+  text-align: center;
+  font-size: 1rem !important;
+  font-weight: 600 !important;
+  font-variant-numeric: tabular-nums;
+  border-radius: 8px !important;
+}
+
+button.my-wc-primary-btn {
+  width: 100%;
+  height: 40px !important;
+  min-height: 40px !important;
+  border-radius: 10px !important;
+  font-size: var(--my-wc-fs) !important;
+  font-weight: 600 !important;
+  cursor: pointer;
+}
+
+/* ---------- Список выполненных подходов ---------- */
+.my-wc-volume-box {
+  padding: var(--my-wc-s2) var(--my-wc-s3);
+  border-radius: 10px;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.my-wc-volume-text {
+  font-size: var(--my-wc-fs-sm);
+  font-weight: 500;
+}
+
+.my-wc-volume-fill {
+  height: 100%;
+  background: var(--color-green, #4aab80);
+  transition: width 0.2s ease;
+}
+
+.my-wc-sets-section {
+  padding: var(--my-wc-s3) var(--my-wc-s4);
+  border-radius: 12px;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  display: flex;
+  flex-direction: column;
+  gap: var(--my-wc-s2);
+}
+
+.my-wc-sets-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--my-wc-s2);
+}
+
+.my-wc-sets-title {
+  font-size: var(--my-wc-fs-sm);
+  font-weight: 600;
+  color: var(--text-normal);
+}
+
+.my-wc-sets-actions {
+  display: flex;
+  gap: var(--my-wc-s2);
+  flex-wrap: wrap;
+}
+
+button.my-wc-btn {
+  height: 30px !important;
+  min-height: 30px !important;
+  padding: 0 10px !important;
+  border-radius: 8px !important;
+  font-size: var(--my-wc-fs-xs) !important;
+  font-weight: 500 !important;
+  background: var(--background-primary) !important;
+  border: 1px solid var(--background-modifier-border) !important;
+  color: var(--text-normal) !important;
+  box-shadow: none !important;
+  cursor: pointer;
+}
+
+.my-wc-sets-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--my-wc-s2);
+}
+
+.my-wc-set-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px 4px 10px;
+  border-radius: 8px;
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  font-size: var(--my-wc-fs-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+button.my-wc-set-del {
+  width: 22px !important;
+  min-width: 22px !important;
+  height: 22px !important;
+  min-height: 22px !important;
+  padding: 0 !important;
+  border-radius: 5px !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  color: var(--text-muted) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer;
+}
+
+button.my-wc-set-del:hover {
+  color: var(--text-error, #e06c75) !important;
+  background: var(--background-modifier-hover) !important;
+}
+
+.my-wc-empty-box,
+.my-wc-preview-banner {
+  padding: var(--my-wc-s4);
+  border-radius: 12px;
+  background: var(--background-secondary);
+  border: 1px dashed var(--background-modifier-border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--my-wc-s2);
+  text-align: center;
+}
+
+.my-wc-sets-empty {
+  font-size: var(--my-wc-fs-xs);
+  color: var(--text-muted);
+}
+
+/* ---------- iPadOS / iOS (pointer: coarse): зоны нажатия 44x44 px ---------- */
+@media (pointer: coarse), (any-pointer: coarse), (hover: none) {
+  .modal.my-wc-modal-container {
+    --my-wc-hit: 44px;
+  }
+
+  button.my-wc-day-btn {
+    min-width: 44px !important;
+    height: 40px !important;
+    min-height: 40px !important;
+  }
+
+  button.my-wc-preset-btn {
+    height: 38px !important;
+    min-height: 38px !important;
+    padding: 0 12px !important;
+  }
+
+  button.my-wc-step-btn {
+    min-width: 46px !important;
+    height: 44px !important;
+    min-height: 44px !important;
+  }
+
+  button.my-wc-primary-btn {
+    height: 46px !important;
+    min-height: 46px !important;
+  }
+
+  button.my-wc-btn {
+    height: 38px !important;
+    min-height: 38px !important;
+  }
+
+  button.my-wc-set-del {
+    width: 30px !important;
+    min-width: 30px !important;
+    height: 30px !important;
+    min-height: 30px !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .my-wc-timer-fill,
+  .my-wc-volume-fill {
+    transition: none !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .modal.my-wc-modal-container {
+    width: 100vw !important;
+    max-width: 100vw !important;
+    height: 100dvh !important;
+    max-height: 100dvh !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+    padding-top: max(12px, env(safe-area-inset-top, 12px)) !important;
+    padding-bottom: max(12px, env(safe-area-inset-bottom, 12px)) !important;
+    padding-left: max(12px, env(safe-area-inset-left, 12px)) !important;
+    padding-right: max(12px, env(safe-area-inset-right, 12px)) !important;
+  }
+}
+
+=== FILE: ./package-lock.json ===
+{
+	"name": "my-workout-companion",
+	"version": "0.1.0",
+	"lockfileVersion": 3,
+	"requires": true,
+	"packages": {
+		"": {
+			"name": "my-workout-companion",
+			"version": "0.1.0",
+			"license": "MIT",
+			"devDependencies": {
+				"@types/node": "^16.11.6",
+				"builtin-modules": "3.3.0",
+				"esbuild": "0.17.3",
+				"obsidian": "latest",
+				"tslib": "2.4.0",
+				"typescript": "4.7.4"
+			}
+		},
+		"node_modules/@esbuild/android-arm": {
+			"version": "0.17.3",
+			"resolved": "https://registry.npmjs.org/@esbuild/android-arm/-/android-arm-0.17.3.tgz",
+			"integrity": "sha512-1Mlz934GvbgdDmt26rTLmf03cAgLg5HyOgJN+ZGCeP3Q9ynYTNMn2/LQxIl7Uy+o4K6Rfi2OuLsr12JQQR8gNg==",
+			"cpu": [
+				"arm"
+			],
+			"dev": true,
+			"license": "MIT",
+			"optional": true,
+			"os": [
+				"android"
+			],
+			"engines": {
+				"node": ">=12"
+			}
+		},
+		"node_modules/@esbuild/android-arm64": {
+			"version": "0.17.3",
+			"resolved": "https://registry.npmjs.org/@esbuild/android-arm64/-/android-arm64-0.17.3.tgz",
+			"integrity": "sha512-XvJsYo3dO3Pi4kpalkyMvfQsjxPWHYjoX4MDiB/FUM4YMfWcXa5l4VCwFWVYI1+92yxqjuqrhNg0CZg3gSouyQ==",
+			"cpu": [
+				"arm64"
+			],
+			"dev": true,
+			"license": "MIT",
+			"optional": true,
+			"os": [
+				"android"
+			],
+			"engines": {
+				"node": ">=12"
+			}
+		},
+		"node_modules/@esbuild/android-x64": {
+			"version": "0.17.3",
+			"resolved": "https://registry.npmjs.org/@esbuild/android-x64/-/android-x64-0.17.3.tgz",
+			"integrity": "sha512-nuV2CmLS07Gqh5/GrZLuqkU9Bm6H6vcCspM+zjp9TdQlxJtIe+qqEXQChmfc7nWdyr/yz3h45Utk1tUn8Cz5+A==",
+			"cpu": [
+				"x64"
+			],
+			"dev": true,
+			"license": "MIT",
+			"optional": true,
+			"os": [
+				"android"
+			],
+			"engines": {
+				"node": ">=12"
+			}
+		},
+		"node_modules/@esbuild/darwin-arm64": {
+			"version": "0.17.3",
+			"resolved": "https://registry.npmjs.org/@esbuild/darwin-arm64/-/darwin-arm64-0.17.3.tgz",
+			"integrity": "sha512-01Hxaaat6m0Xp9AXGM8mjFtqqwDjzlMP0eQq9zll9U85ttVALGCGDuEvra5Feu/NbP5AEP1MaopPwzsTcUq1cw==",
+			"cpu": [
+				"arm64"
+			],
+			"dev": true,
+			"license": "MIT",
+			"optional": true,
+			"os": [
+				"darwin"
+			],
+			"engines": {
+				"node": ">=12"
+			}
+		},
+		"node_modules/@esbuild/darwin-x64": {
+			"version": "0.17.3",
+			"resolved": "https://registry.npmjs.org/@esbuild/darwin-x64/-/darwin-x64-0.17.3.tgz",
+			"integrity": "sha512-Eo2gq0Q/er2muf8Z83X21UFoB7EU6/m3GNKvrhACJkjVThd0uA+8RfKpfNhuMCl1bKRfBzKOk6xaYKQZ4lZqvA==",
+			"cpu": [
+				"x64"
+			],
+			"dev": true,
+			"license": "MIT",
+			"optional": true,
+			"os": [
+				"darwin"
+			],
+			"engines": {
+				"node": ">=12"
+			}
+		},
+		"node_modules/@esbuild/freebsd-arm64": {
+			"version": "0.17.3",
+			"resolved": "https://registry.npmjs.org/@esbuild/freebsd-arm64/-/freebsd-arm64-0.17.3.tgz",
+			"integrity": "sha512-CN62ESxaquP61n1ZjQP/jZte8CE09M6kNn3baos2SeUfdVBkWN5n6vGp2iKyb/bm/x4JQzEvJgRHLGd5F5b81w==",
+			"cpu": [
+				"arm64"
+			],
+			"dev": true,
+			"license": "MIT",
+			"optional": true,
+			"os": [
+				"freebsd"
+			],
+			"engines": {
+				"node": ">=12"
+			}
+		},
+		"node_modules/@esbuild/freebsd-x64": {
+			"version": "0.17.3",
+			"resolved": "https://registry.npmjs.org/@esbuild/freebsd-x64/-/freebsd-x64-0.17.3.tgz",
+			"integrity": "sha512-feq+K8TxIznZE+zhdVurF3WNJ/Sa35dQNYbaqM/wsCbWdzXr5lyq+AaTUSER2cUR+SXPnd/EY75EPRjf4s1SLg==",
+			"cpu": [
+				"x64"
+			],
+			"dev": true,
+			"license": "MIT",
+			"optional": true,
+			"os": [
+				"freebsd"
+			],
+			"engines": {
+				"node": ">=12"
+			}
+		},
+		"node_modules/@esbuild/linux-arm": {
+			"version": "0.17.3",
+			"resolved": "https://registry.npmjs.org/@esbuild/linux-arm/-/linux-arm-0.17.3.tgz",
+			"integrity": "sha512-CLP3EgyNuPcg2cshbwkqYy5bbAgK+VhyfMU7oIYyn+x4Y67xb5C5ylxsNUjRmr8BX+MW3YhVNm6Lq6FKtRTWHQ==",
+			"cpu": [
+				"arm"
+			],
+			"dev": true,
+			"license": "MIT",
+			"optional": true,
+			"os": [
+				"linux"
+			],
+			"engines": {
+				"node": ">=12"
+			}
+		},
+		"node_modules/@esbuild/linux-arm64": {
+			"version": "0.17.3",
+			"resolved": "https://registry.npmjs.org/@esbuild/linux-arm64/-/linux-arm64-0.17.3.tgz",
+			"integrity": "sha512-JHeZXD4auLYBnrKn6JYJ0o5nWJI9PhChA/Nt0G4MvLaMrvXuWnY93R3a7PiXeJQphpL1nYsaMcoV2QtuvRnF/g==",
+			"cpu": [
+				"arm64"
+			],
+			"dev": true,
+			"license": "MIT",
+			"optional": true,
+			"os": [
+				"linux"
+			],
+			"engines": {
+				"node": ">=12"
+			}
+		},
+		"node_modules/@esbuild/linux-ia32": {
+			"version": "0.17.3",
+			"resolved": "https://registry.npmjs.org/@esbuild/linux-ia32/-/linux-ia32-0.17.3.tgz",
+			"integrity": "sha512-FyXlD2ZjZqTFh0sOQxFDiWG1uQUEOLbEh9gKN/7pFxck5Vw0qjWSDqbn6C10GAa1rXJpwsntHcmLqydY9ST9ZA==",
+			"cpu": [
+				"ia32"
+			],
+			"dev": true,
+			"license": "MIT",
+			"optional": true,
+			"os": [
+				"linux"
+			],
+			"engines": {
+				"node": ">=12"
+			}
+		},
+		"node_modules/@esbuild/linux-loong64": {
+			"version": "0.17.3",
+			"resolved": "https://registry.npmjs.org/@esbuild/linux-loong64/-/linux-loong64-0.17.3.tgz",
+			"integrity": "sha512-OrDGMvDBI2g7s04J8dh8/I7eSO+/E7nMDT2Z5IruBfUO/RiigF1OF6xoH33Dn4W/OwAWSUf1s2nXamb28ZklTA==",
+			"cpu": [
+				"loong64"
+			],
+			"dev": true,
+			"license": "MIT",
+			"optional": true,
+			"os": [
+				"linux"
+			],
+			"engines": {
+				"node": ">=12"
+			}
+		},
+		"node_modules/@esbuild/linux-mips64el": {
+			"version": "0.17.3",
+			"resolved": "https://registry.npmjs.org/@esbuild/linux-mips64el/-/linux-mips64el-0.17.3.tgz",
+			"integrity": "sha512-DcnUpXnVCJvmv0TzuLwKBC2nsQHle8EIiAJiJ+PipEVC16wHXaPEKP0EqN8WnBe0TPvMITOUlP2aiL5YMld+CQ==",
+			"cpu": [
+				"mips64el"
+			],
+			"dev": true,
+			"license": "MIT",
+			"optional": true,
+			"os": [
+				"linux"
+			],
+			"engines": {
+				"node": ">=12"
+			}
+		},
+		"node_modules/@esbuild/linux-ppc64": {
+			"version": "0.17.3",
+			"resolved": "https://registry.npmjs.org/@esbuild/linux-ppc64/-/linux-ppc64-0.17.3.tgz",
+			"integrity": "sha512-BDYf/l1WVhWE+FHAW3FzZPtVlk9QsrwsxGzABmN4g8bTjmhazsId3h127pliDRRu5674k1Y2RWejbpN46N9ZhQ==",
+			"cpu": [
+				"ppc64"
+			],
+			"dev": true,
+			"license": "MIT",
+			"optional": true,
+			"os": [
+				"linux"
+			],
+			"engines": {
+				"node": ">=12"
+			}
+		},
+		"node_modules/@esbuild/linux-riscv64": {
+			"version": "0.17.3",
+			"resolved": "https://registry.npmjs.org/@esbuild/linux-riscv64/-/linux-riscv64-0.17.3.tgz",
+			"integrity": "sha512-WViAxWYMRIi+prTJTyV1wnqd2mS2cPqJlN85oscVhXdb/ZTFJdrpaqm/uDsZPGKHtbg5TuRX/ymKdOSk41YZow==",
+			"cpu": [
+				"riscv64"
+			],
+			"dev": true,
+			"license": "MIT",
+			"optional": true,
+			"os": [
+				"linux"
+			],
+			"engines": {
+				"node": ">=12"
+			}
+		},
+		"node_modules/@esbuild/linux-s390x": {
+			"version": "0.17.3",
+			"resolved": "https://registry.npmjs.org/@esbuild/linux-s390x/-/linux-s390x-0.17.3.tgz",
+			"integrity": "sha512-Iw8lkNHUC4oGP1O/KhumcVy77u2s6+KUjieUqzEU3XuWJqZ+AY7uVMrrCbAiwWTkpQHkr00BuXH5RpC6Sb/7Ug==",
+			"cpu": [
+				"s390x"
+			],
+			"dev": true,
+			"license": "MIT",
+			"optional": true,
+			"os": [
+				"linux"
+			],
+			"engines": {
+				"node": ">=12"
+			}
+		},
+		"node_modules/@esbuild/linux-x64": {
+			"version": "0.17.3",
+			"resolved": "https://registry.npmjs.org/@esbuild/linux-x64/-/linux-x64-0.17.3.tgz",
+			"integrity": "sha512-0AGkWQMzeoeAtXQRNB3s4J1/T2XbigM2/Mn2yU1tQSmQRmHIZdkGbVq2A3aDdNslPyhb9/lH0S5GMTZ4xsjBqg==",
+			"cpu": [
+				"x64"
+			],
+			"dev": true,
+			"license": "MIT",
+			"optional": true,
+			"os": [
+				"linux"
+			],
+			"engines": {
+				"node": ">=12"
+			}
+		},
+		"node_modules/@esbuild/netbsd-x64": {
+			"version": "0.17.3",
+			"resolved": "https://registry.npmjs.org/@esbuild/netbsd-x64/-/netbsd-x64-0.17.3.tgz",
+			"integrity": "sha512-4+rR/WHOxIVh53UIQIICryjdoKdHsFZFD4zLSonJ9RRw7bhKzVyXbnRPsWSfwybYqw9sB7ots/SYyufL1mBpEg==",
+			"cpu": [
+				"x64"
+			],
+			"dev": true,
+			"license": "MIT",
+			"optional": true,
+			"os": [
+				"netbsd"
+			],
+			"engines": {
+				"node": ">=12"
+			}
+		},
+		"node_modules/@esbuild/openbsd-x64": {
+			"version": "0.17.3",
+			"resolved": "https://registry.npmjs.org/@esbuild/openbsd-x64/-/openbsd-x64-0.17.3.tgz",
+			"integrity": "sha512-cVpWnkx9IYg99EjGxa5Gc0XmqumtAwK3aoz7O4Dii2vko+qXbkHoujWA68cqXjhh6TsLaQelfDO4MVnyr+ODeA==",
+			"cpu": [
+				"x64"
+			],
+			"dev": true,
+			"license": "MIT",
+			"optional": true,
+			"os": [
+				"openbsd"
+			],
+			"engines": {
+				"node": ">=12"
+			}
+		},
+		"node_modules/@esbuild/sunos-x64": {
+			"version": "0.17.3",
+			"resolved": "https://registry.npmjs.org/@esbuild/sunos-x64/-/sunos-x64-0.17.3.tgz",
+			"integrity": "sha512-RxmhKLbTCDAY2xOfrww6ieIZkZF+KBqG7S2Ako2SljKXRFi+0863PspK74QQ7JpmWwncChY25JTJSbVBYGQk2Q==",
+			"cpu": [
+				"x64"
+			],
+			"dev": true,
+			"license": "MIT",
+			"optional": true,
+			"os": [
+				"sunos"
+			],
+			"engines": {
+				"node": ">=12"
+			}
+		},
+		"node_modules/@esbuild/win32-arm64": {
+			"version": "0.17.3",
+			"resolved": "https://registry.npmjs.org/@esbuild/win32-arm64/-/win32-arm64-0.17.3.tgz",
+			"integrity": "sha512-0r36VeEJ4efwmofxVJRXDjVRP2jTmv877zc+i+Pc7MNsIr38NfsjkQj23AfF7l0WbB+RQ7VUb+LDiqC/KY/M/A==",
+			"cpu": [
+				"arm64"
+			],
+			"dev": true,
+			"license": "MIT",
+			"optional": true,
+			"os": [
+				"win32"
+			],
+			"engines": {
+				"node": ">=12"
+			}
+		},
+		"node_modules/@esbuild/win32-ia32": {
+			"version": "0.17.3",
+			"resolved": "https://registry.npmjs.org/@esbuild/win32-ia32/-/win32-ia32-0.17.3.tgz",
+			"integrity": "sha512-wgO6rc7uGStH22nur4aLFcq7Wh86bE9cOFmfTr/yxN3BXvDEdCSXyKkO+U5JIt53eTOgC47v9k/C1bITWL/Teg==",
+			"cpu": [
+				"ia32"
+			],
+			"dev": true,
+			"license": "MIT",
+			"optional": true,
+			"os": [
+				"win32"
+			],
+			"engines": {
+				"node": ">=12"
+			}
+		},
+		"node_modules/@esbuild/win32-x64": {
+			"version": "0.17.3",
+			"resolved": "https://registry.npmjs.org/@esbuild/win32-x64/-/win32-x64-0.17.3.tgz",
+			"integrity": "sha512-FdVl64OIuiKjgXBjwZaJLKp0eaEckifbhn10dXWhysMJkWblg3OEEGKSIyhiD5RSgAya8WzP3DNkngtIg3Nt7g==",
+			"cpu": [
+				"x64"
+			],
+			"dev": true,
+			"license": "MIT",
+			"optional": true,
+			"os": [
+				"win32"
+			],
+			"engines": {
+				"node": ">=12"
+			}
+		},
+		"node_modules/@types/codemirror": {
+			"version": "5.60.8",
+			"resolved": "https://registry.npmjs.org/@types/codemirror/-/codemirror-5.60.8.tgz",
+			"integrity": "sha512-VjFgDF/eB+Aklcy15TtOTLQeMjTo07k7KAjql8OK5Dirr7a6sJY4T1uVBDuTVG9VEmn1uUsohOpYnVfgC6/jyw==",
+			"dev": true,
+			"license": "MIT",
+			"dependencies": {
+				"@types/tern": "*"
+			}
+		},
+		"node_modules/@types/estree": {
+			"version": "1.0.9",
+			"resolved": "https://registry.npmjs.org/@types/estree/-/estree-1.0.9.tgz",
+			"integrity": "sha512-GhdPgy1el4/ImP05X05Uw4cw2/M93BCUmnEvWZNStlCzEKME4Fkk+YpoA5OiHNQmoS7Cafb8Xa3Pya8m1Qrzeg==",
+			"dev": true,
+			"license": "MIT"
+		},
+		"node_modules/@types/node": {
+			"version": "16.18.126",
+			"resolved": "https://registry.npmjs.org/@types/node/-/node-16.18.126.tgz",
+			"integrity": "sha512-OTcgaiwfGFBKacvfwuHzzn1KLxH/er8mluiy8/uM3sGXHaRe73RrSIj01jow9t4kJEW633Ov+cOexXeiApTyAw==",
+			"dev": true,
+			"license": "MIT"
+		},
+		"node_modules/@types/tern": {
+			"version": "0.23.9",
+			"resolved": "https://registry.npmjs.org/@types/tern/-/tern-0.23.9.tgz",
+			"integrity": "sha512-ypzHFE/wBzh+BlH6rrBgS5I/Z7RD21pGhZ2rltb/+ZrVM1awdZwjx7hE5XfuYgHWk9uvV5HLZN3SloevCAp3Bw==",
+			"dev": true,
+			"license": "MIT",
+			"dependencies": {
+				"@types/estree": "*"
+			}
+		},
+		"node_modules/builtin-modules": {
+			"version": "3.3.0",
+			"resolved": "https://registry.npmjs.org/builtin-modules/-/builtin-modules-3.3.0.tgz",
+			"integrity": "sha512-zhaCDicdLuWN5UbN5IMnFqNMhNfo919sH85y2/ea+5Yg9TsTkeZxpL+JLbp6cgYFS4sRLp3YV4S6yDuqVWHYOw==",
+			"dev": true,
+			"license": "MIT",
+			"engines": {
+				"node": ">=6"
+			},
+			"funding": {
+				"url": "https://github.com/sponsors/sindresorhus"
+			}
+		},
+		"node_modules/esbuild": {
+			"version": "0.17.3",
+			"resolved": "https://registry.npmjs.org/esbuild/-/esbuild-0.17.3.tgz",
+			"integrity": "sha512-9n3AsBRe6sIyOc6kmoXg2ypCLgf3eZSraWFRpnkto+svt8cZNuKTkb1bhQcitBcvIqjNiK7K0J3KPmwGSfkA8g==",
+			"dev": true,
+			"hasInstallScript": true,
+			"license": "MIT",
+			"bin": {
+				"esbuild": "bin/esbuild"
+			},
+			"engines": {
+				"node": ">=12"
+			},
+			"optionalDependencies": {
+				"@esbuild/android-arm": "0.17.3",
+				"@esbuild/android-arm64": "0.17.3",
+				"@esbuild/android-x64": "0.17.3",
+				"@esbuild/darwin-arm64": "0.17.3",
+				"@esbuild/darwin-x64": "0.17.3",
+				"@esbuild/freebsd-arm64": "0.17.3",
+				"@esbuild/freebsd-x64": "0.17.3",
+				"@esbuild/linux-arm": "0.17.3",
+				"@esbuild/linux-arm64": "0.17.3",
+				"@esbuild/linux-ia32": "0.17.3",
+				"@esbuild/linux-loong64": "0.17.3",
+				"@esbuild/linux-mips64el": "0.17.3",
+				"@esbuild/linux-ppc64": "0.17.3",
+				"@esbuild/linux-riscv64": "0.17.3",
+				"@esbuild/linux-s390x": "0.17.3",
+				"@esbuild/linux-x64": "0.17.3",
+				"@esbuild/netbsd-x64": "0.17.3",
+				"@esbuild/openbsd-x64": "0.17.3",
+				"@esbuild/sunos-x64": "0.17.3",
+				"@esbuild/win32-arm64": "0.17.3",
+				"@esbuild/win32-ia32": "0.17.3",
+				"@esbuild/win32-x64": "0.17.3"
+			}
+		},
+		"node_modules/moment": {
+			"version": "2.29.4",
+			"resolved": "https://registry.npmjs.org/moment/-/moment-2.29.4.tgz",
+			"integrity": "sha512-5LC9SOxjSc2HF6vO2CyuTDNivEdoz2IvyJJGj6X8DJ0eFyfszE0QiEd+iXmBvUP3WHxSjFH/vIsA0EN00cgr8w==",
+			"dev": true,
+			"license": "MIT",
+			"engines": {
+				"node": "*"
+			}
+		},
+		"node_modules/obsidian": {
+			"version": "1.12.3",
+			"resolved": "https://registry.npmjs.org/obsidian/-/obsidian-1.12.3.tgz",
+			"integrity": "sha512-HxWqe763dOqzXjnNiHmAJTRERN8KILBSqxDSEqbeSr7W8R8Jxezzbca+nz1LiiqXnMpM8lV2jzAezw3CZ4xNUw==",
+			"dev": true,
+			"license": "MIT",
+			"dependencies": {
+				"@types/codemirror": "5.60.8",
+				"moment": "2.29.4"
+			},
+			"peerDependencies": {
+				"@codemirror/state": "6.5.0",
+				"@codemirror/view": "6.38.6"
+			}
+		},
+		"node_modules/tslib": {
+			"version": "2.4.0",
+			"resolved": "https://registry.npmjs.org/tslib/-/tslib-2.4.0.tgz",
+			"integrity": "sha512-d6xOpEDfsi2CZVlPQzGeux8XMwLT9hssAsaPYExaQMuYskwb+x1x7J371tWlbBdWHroy99KnVB6qIkUbs5X3UQ==",
+			"dev": true,
+			"license": "0BSD"
+		},
+		"node_modules/typescript": {
+			"version": "4.7.4",
+			"resolved": "https://registry.npmjs.org/typescript/-/typescript-4.7.4.tgz",
+			"integrity": "sha512-C0WQT0gezHuw6AdY1M2jxUO83Rjf0HP7Sk1DtXj6j1EwkQNZrHAg2XPWlq62oqEhYvONq5pkC2Y9oPljWToLmQ==",
+			"dev": true,
+			"license": "Apache-2.0",
+			"bin": {
+				"tsc": "bin/tsc",
+				"tsserver": "bin/tsserver"
+			},
+			"engines": {
+				"node": ">=4.2.0"
+			}
+		}
+	}
+}
+
+
+=== FILE: ./tsconfig.json ===
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "inlineSourceMap": true,
+    "inlineSources": true,
+    "module": "ESNext",
+    "target": "ES2018",
+    "allowJs": true,
+    "noImplicitAny": true,
+    "moduleResolution": "node",
+    "importHelpers": true,
+    "isolatedModules": true,
+    "strictNullChecks": true,
+    "noUncheckedIndexedAccess": true,
+    "lib": ["DOM", "ES5", "ES6", "ES7", "ES2018", "ES2020"]
+  },
+  "include": ["src/**/*.ts"]
+}
+
+=== FILE: ./README.md ===
+# Obsidian Sample Plugin
+
+This is a sample plugin for Obsidian (https://obsidian.md).
+
+This project uses TypeScript to provide type checking and documentation.
+The repo depends on the latest plugin API (obsidian.d.ts) in TypeScript Definition format, which contains TSDoc comments describing what it does.
+
+This sample plugin demonstrates some of the basic functionality the plugin API can do.
+
+- Adds a ribbon icon, which shows a Notice when clicked.
+- Adds a command "Open modal (simple)" which opens a Modal.
+- Adds a plugin setting tab to the settings page.
+- Registers a global click event and outputs a Notice on click.
+- Registers a global interval which logs 'setInterval' to the console.
+
+## First time developing plugins?
+
+Quick starting guide for new plugin devs:
+
+- Check if [someone already developed a plugin for what you want](https://obsidian.md/plugins)! There might be an existing plugin similar enough that you can partner up with.
+- Make a copy of this repo as a template with the "Use this template" button (login to GitHub if you don't see it).
+- Clone your repo to a local development folder. For convenience, you can place this folder in your `.obsidian/plugins/your-plugin-name` folder.
+- Install NodeJS, then run `npm i` in the command line under your repo folder.
+- Run `npm run dev` to compile your plugin from `src/main.ts` to `main.js`.
+- Make changes to `src/main.ts` (or create new `.ts` files). Those changes should be automatically compiled into `main.js`.
+- Reload Obsidian to load the new version of your plugin.
+- Enable plugin in settings window.
+- For updates to the Obsidian API run `npm update` in the command line under your repo folder.
+
+## Releasing new releases
+
+- Update your `manifest.json` with your new version number, such as `1.0.1`, and the minimum Obsidian version required for your latest release.
+- Update your `versions.json` file with `"new-plugin-version": "minimum-obsidian-version"` so older versions of Obsidian can download an older version of your plugin that's compatible.
+- Create new GitHub release using your new version number as the "Tag version". Use the exact version number, don't include a prefix `v`. See here for an example: https://github.com/obsidianmd/obsidian-sample-plugin/releases
+- Upload the files `manifest.json`, `main.js`, `styles.css` as binary attachments. Note: The manifest.json file must be in two places, first the root path of your repository and also in the release.
+- Publish the release.
+
+> You can simplify the version bump process by running `npm version patch`, `npm version minor` or `npm version major` after updating `minAppVersion` manually in `manifest.json`.
+> The command will bump version in `manifest.json` and `package.json`, and add the entry for the new version to `versions.json`
+
+## Adding your plugin to the community plugin list
+
+- Check the [plugin guidelines](https://docs.obsidian.md/Plugins/Releasing/Plugin+guidelines).
+- Publish an initial version.
+- Make sure you have a `README.md` file in the root of your repo.
+- Make a pull request at https://github.com/obsidianmd/obsidian-releases to add your plugin.
+
+## How to use
+
+- Clone this repo.
+- Make sure your NodeJS is at least v18 (`node --version`).
+- `npm i` to install dependencies.
+- `npm run dev` to start compilation in watch mode.
+
+## Manually installing the plugin
+
+- Copy over `main.js`, `styles.css`, `manifest.json` to your vault `VaultFolder/.obsidian/plugins/your-plugin-id/`.
+
+## Improve code quality with eslint
+
+- [ESLint](https://eslint.org/) is a tool that analyzes your code to quickly find problems. You can run ESLint against your plugin to find common bugs and ways to improve your code.
+- This project already has eslint preconfigured, you can invoke a check by running`npm run lint`
+- Together with a custom eslint [plugin](https://github.com/obsidianmd/eslint-plugin) for Obsidan specific code guidelines.
+- A GitHub action is preconfigured to automatically lint every commit on all branches.
+
+## Funding URL
+
+You can include funding URLs where people who use your plugin can financially support it.
+
+The simple way is to set the `fundingUrl` field to your link in your `manifest.json` file:
+
+```json
+{
+	"fundingUrl": "https://buymeacoffee.com"
+}
+```
+
+If you have multiple URLs, you can also do:
+
+```json
+{
+	"fundingUrl": {
+		"Buy Me a Coffee": "https://buymeacoffee.com",
+		"GitHub Sponsor": "https://github.com/sponsors",
+		"Patreon": "https://www.patreon.com/"
+	}
+}
+```
+
+## API Documentation
+
+See https://docs.obsidian.md
+
+
+=== FILE: ./versions.json ===
+{
+	"0.1.0": "1.5.0"
+}
+
+=== FILE: ./esbuild.config.mjs ===
+import esbuild from "esbuild";
+import process from "process";
+import builtins from "builtin-modules";
+
+const prod = process.argv[2] === "production";
+
+const context = await esbuild.context({
+  entryPoints: ["src/main.ts"],
+  bundle: true,
+  external: [
+    "obsidian",
+    "electron",
+    "@codemirror/autocomplete",
+    "@codemirror/collab",
+    "@codemirror/commands",
+    "@codemirror/language",
+    "@codemirror/lint",
+    "@codemirror/search",
+    "@codemirror/state",
+    "@codemirror/view",
+    "@lezer/common",
+    "@lezer/highlight",
+    "@lezer/lr",
+    ...builtins,
+  ],
+  format: "cjs",
+  target: "es2018",
+  logLevel: "info",
+  sourcemap: prod ? false : "inline",
+  treeShaking: true,
+  minify: prod,
+  outfile: "main.js",
+});
+
+if (prod) {
+  await context.rebuild();
+  process.exit(0);
+} else {
+  await context.watch();
+}
+
+=== FILE: ./src/timer.ts ===
+import { Notice } from "obsidian";
+import type MyWorkoutCompanionPlugin from "./main";
+import type { ActiveRestTimerState } from "./types";
+
+export type TimerTickListener = (state: ActiveRestTimerState, now: number) => void;
+
+export class WorkoutRestTimerService {
+  private plugin: MyWorkoutCompanionPlugin;
+  private intervalId: number | null = null;
+  private listeners = new Set<TimerTickListener>();
+  private audioCtx: AudioContext | null = null;
+  private lastFinishedBannerEndAt = 0;
+
+  constructor(plugin: MyWorkoutCompanionPlugin) {
+    this.plugin = plugin;
+  }
+
+  /**
+   * Вызывается внутри обработчика клика пользователя (старт таймера или запись подхода),
+   * чтобы разблокировать AudioContext на iOS / iPadOS.
+   */
+  unlockAudioOnUserGesture(): void {
+    if (!this.plugin.settings.soundEnabled) return;
+    try {
+      const Ctx =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!Ctx) return;
+      if (!this.audioCtx) {
+        this.audioCtx = new Ctx();
+      }
+      if (this.audioCtx.state === "suspended") {
+        void this.audioCtx.resume();
+      }
+    } catch {
+      // игнорируем, если аудио недоступно на устройстве
+    }
+  }
+
+  private playCompletionChime(): void {
+    if (!this.plugin.settings.soundEnabled) return;
+    try {
+      const Ctx =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!Ctx) return;
+      if (!this.audioCtx) {
+        this.audioCtx = new Ctx();
+      }
+      const ctx = this.audioCtx;
+      if (ctx.state === "suspended") {
+        void ctx.resume();
+      }
+
+      const now = ctx.currentTime;
+      const playTone = (freq: number, startOffset: number, duration: number) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(freq, now + startOffset);
+        gain.gain.setValueAtTime(0.0001, now + startOffset);
+        gain.gain.exponentialRampToValueAtTime(0.18, now + startOffset + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + startOffset + duration);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now + startOffset);
+        osc.stop(now + startOffset + duration + 0.02);
+      };
+
+      playTone(659.25, 0, 0.16); // E5
+      playTone(880.0, 0.18, 0.24); // A5
+    } catch {
+      // игнорируем ошибки аудио на заблокированном устройстве
+    }
+  }
+
+  getState(): ActiveRestTimerState {
+    return this.plugin.settings.timer;
+  }
+
+  getLastFinishedBannerEndAt(): number {
+    return this.lastFinishedBannerEndAt;
+  }
+
+  start(sessionPath: string, durationSec: number): void {
+    this.unlockAudioOnUserGesture();
+    const sec = Math.max(5, Math.round(durationSec));
+    const now = Date.now();
+    const endAt = now + sec * 1000;
+    this.lastFinishedBannerEndAt = 0;
+
+    this.plugin.settings.timer = {
+      sessionPath,
+      startAt: now,
+      endAt,
+      durationSec: sec,
+      notifiedEndAt: 0,
+    };
+    this.plugin.requestSaveSettings();
+    this.ensureLoop();
+    this.emitTick();
+  }
+
+  addSeconds(deltaSec: number): void {
+    this.unlockAudioOnUserGesture();
+    const t = this.plugin.settings.timer;
+    const now = Date.now();
+    if (t.endAt > now) {
+      const nextEnd = Math.max(now + 1000, t.endAt + deltaSec * 1000);
+      t.endAt = nextEnd;
+      t.durationSec = Math.max(5, Math.round((nextEnd - t.startAt) / 1000));
+      this.plugin.requestSaveSettings();
+      this.emitTick();
+    } else {
+      const base = Math.max(15, deltaSec > 0 ? deltaSec : t.durationSec || 120);
+      this.start(t.sessionPath, base);
+    }
+  }
+
+  reset(newDefaultDurationSec?: number): void {
+    const t = this.plugin.settings.timer;
+    this.lastFinishedBannerEndAt = 0;
+    this.plugin.settings.timer = {
+      sessionPath: t.sessionPath,
+      startAt: 0,
+      endAt: 0,
+      durationSec: newDefaultDurationSec ?? (t.durationSec || 120),
+      notifiedEndAt: t.notifiedEndAt,
+    };
+    this.plugin.requestSaveSettings();
+    this.stopLoop();
+    this.emitTick();
+  }
+
+  subscribe(fn: TimerTickListener): () => void {
+    this.listeners.add(fn);
+    this.checkAndSyncNow();
+    return () => {
+      this.listeners.delete(fn);
+    };
+  }
+
+  /**
+   * Вызывается при старте плагина, открытии окна, а также по событиям visibilitychange / focus на iPad.
+   * Не затирает молча истёкший таймер, а фиксирует завершение и уведомляет пользователя.
+   */
+  checkAndSyncNow(): void {
+    const t = this.plugin.settings.timer;
+    const now = Date.now();
+
+    if (t.endAt > 0) {
+      if (t.endAt > now) {
+        this.ensureLoop();
+      } else {
+        const finishedEndAt = t.endAt;
+        const wasNotified = t.notifiedEndAt === finishedEndAt;
+        this.lastFinishedBannerEndAt = finishedEndAt;
+        t.endAt = 0;
+        t.startAt = 0;
+        t.notifiedEndAt = finishedEndAt;
+        this.plugin.requestSaveSettings();
+        this.stopLoop();
+
+        if (!wasNotified) {
+          const overdueSec = Math.max(0, Math.round((now - finishedEndAt) / 1000));
+          const suffix =
+            overdueSec >= 5 ? ` (${overdueSec} с назад)` : "";
+          new Notice(`⏰ Отдых завершён${suffix} — пора на подход!`);
+          this.playCompletionChime();
+        }
+      }
+    }
+    this.emitTick();
+  }
+
+  private ensureLoop(): void {
+    if (this.intervalId !== null) return;
+    this.intervalId = window.setInterval(() => {
+      this.checkAndSyncNow();
+    }, 250);
+  }
+
+  private stopLoop(): void {
+    if (this.intervalId !== null) {
+      window.clearInterval(this.intervalId);
+      this.intervalId = null;
+    }
+  }
+
+  private emitTick(): void {
+    const now = Date.now();
+    const state = this.plugin.settings.timer;
+    for (const fn of this.listeners) {
+      fn(state, now);
+    }
+  }
+
+  destroy(): void {
+    this.stopLoop();
+    this.listeners.clear();
+    if (this.audioCtx) {
+      try {
+        void this.audioCtx.close();
+      } catch {
+        // игнорируем
+      }
+      this.audioCtx = null;
+    }
+  }
+}
+
+export function formatSecondsMMSS(sec: number): string {
+  const safe = Math.max(0, Math.floor(sec));
+  const m = String(Math.floor(safe / 60)).padStart(2, "0");
+  const s = String(safe % 60).padStart(2, "0");
+  return `${m}:${s}`;
+}
+
+=== FILE: ./src/modal.ts ===
+import { App, Modal, Notice, setIcon } from "obsidian";
+import type MyWorkoutCompanionPlugin from "./main";
+import {
+  ActiveRestTimerState,
+  DAYS_SHORT,
+  DEFAULT_SCHEDULE,
+  DayProgramSpec,
+  EXERCISES_CATALOG,
+  HydratedWorkoutSession,
+  ProgramExerciseSpec,
+  REST_PRESETS,
+  SessionDraftState,
+  WORKOUT_KEYS,
+  WorkoutSessionSummary,
+} from "./types";
+import {
+  PreviousExerciseReference,
+  appendSetToWorkoutFile,
+  collectWorkoutSessions,
+  computeSessionDurationMinutes,
+  createOrOpenWorkoutSessionFile,
+  deleteSetFromWorkoutFile,
+  findPreviousExerciseResult,
+  formatShortDateRu,
+  getExerciseMeta,
+  hydrateWorkoutSession,
+  isoWeekdayOf,
+  syncWorkoutHabitToDiary,
+  todayLocalISO,
+  yesterdayLocalISO,
+} from "./scanner";
+import { formatSecondsMMSS } from "./timer";
+
+export interface OpenWorkoutOptions {
+  sessionPath?: string;
+  dayNumber?: number;
+}
+
+interface UniqueProgramExercise extends ProgramExerciseSpec {
+  key: string;
+}
+
+function getUniqueExercises(program: DayProgramSpec): UniqueProgramExercise[] {
+  const out: UniqueProgramExercise[] = [];
+  const seen = new Set<string>();
+  for (const e of program.exercises) {
+    const key = `${e.name}__${e.weight}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      out.push({ ...e, key });
+    }
+  }
+  if (out.length === 0) {
+    for (const c of EXERCISES_CATALOG) {
+      out.push({
+        name: c.name,
+        sets: 4,
+        weight: 0,
+        target: "MAX",
+        rest: 120,
+        key: `${c.name}__0`,
+      });
+    }
+  }
+  return out;
+}
+
+export class WorkoutCompanionModal extends Modal {
+  private plugin: MyWorkoutCompanionPlugin;
+  private options: OpenWorkoutOptions;
+  private closed = false;
+  private cleanups: Array<() => void> = [];
+
+  private allSessions: WorkoutSessionSummary[] = [];
+  private activeSession: HydratedWorkoutSession | null = null;
+  private prevRef: PreviousExerciseReference | null = null;
+  private renderToken = 0;
+
+  private headerEl!: HTMLElement;
+  private timerCardEl!: HTMLElement;
+  private timerTimeEl: HTMLElement | null = null;
+  private timerStatusEl: HTMLElement | null = null;
+  private timerFillEl: HTMLElement | null = null;
+  private bodyEl!: HTMLElement;
+
+  constructor(
+    app: App,
+    plugin: MyWorkoutCompanionPlugin,
+    options: OpenWorkoutOptions = {}
+  ) {
+    super(app);
+    this.plugin = plugin;
+    this.options = options;
+    (this as unknown as { shouldRestoreSelection?: boolean }).shouldRestoreSelection =
+      false;
+  }
+
+  private focusSafeContainer(): void {
+    if (this.closed) return;
+    const active = document.activeElement;
+    if (
+      active instanceof HTMLSelectElement ||
+      active instanceof HTMLInputElement ||
+      active instanceof HTMLButtonElement
+    ) {
+      active.blur();
+    }
+    this.contentEl.focus({ preventScroll: true });
+  }
+
+  onOpen(): void {
+    this.closed = false;
+    this.modalEl.addClass("my-wc-modal-container");
+    this.contentEl.addClass("my-wc-modal");
+    this.contentEl.setAttribute("tabindex", "-1");
+
+    this.headerEl = this.contentEl.createDiv("my-wc-header");
+    this.timerCardEl = this.contentEl.createDiv("my-wc-timer-card");
+    this.bodyEl = this.contentEl.createDiv("my-wc-body");
+
+    const unsubTimer = this.plugin.timer.subscribe((state, now) => {
+      this.updateTimerDisplayDOM(state, now);
+    });
+    this.cleanups.push(unsubTimer);
+
+    if (this.options.sessionPath) {
+      this.plugin.settings.pinnedSessionPath = this.options.sessionPath;
+      this.plugin.settings.viewMode = "session";
+    }
+    if (
+      this.options.dayNumber &&
+      DEFAULT_SCHEDULE[this.options.dayNumber]
+    ) {
+      this.plugin.settings.selectedDay = this.options.dayNumber;
+    }
+
+    void this.refreshAll().then(() => {
+      this.focusSafeContainer();
+      window.setTimeout(() => this.focusSafeContainer(), 30);
+    });
+  }
+
+  onClose(): void {
+    this.closed = true;
+    for (const fn of this.cleanups) fn();
+    this.cleanups = [];
+    this.timerTimeEl = null;
+    this.timerStatusEl = null;
+    this.timerFillEl = null;
+    this.contentEl.empty();
+  }
+
+  private getDraft(
+    sessionPath: string,
+    program: DayProgramSpec,
+    exList: UniqueProgramExercise[]
+  ): SessionDraftState {
+    const existing = this.plugin.settings.draftBySession[sessionPath];
+    const firstEx = exList[0];
+    if (existing) return existing;
+    const init: SessionDraftState = {
+      selectedExKey: firstEx?.key ?? "Подтягивания__0",
+      customWeight: firstEx?.weight ?? 0,
+      draftReps: 10,
+      restDurationSec: firstEx?.rest ?? program.restBetweenSets ?? 120,
+    };
+    this.plugin.settings.draftBySession[sessionPath] = init;
+    return init;
+  }
+
+  private async refreshAll(): Promise<void> {
+    if (this.closed) return;
+    const token = ++this.renderToken;
+    const todayISO = todayLocalISO();
+    const yesterdayISO = yesterdayLocalISO();
+    const currentWeekday = isoWeekdayOf(todayISO);
+
+    this.allSessions = collectWorkoutSessions(this.app, this.plugin.settings);
+    const byPath = new Map(this.allSessions.map((s) => [s.path, s]));
+    const todayEntry =
+      this.allSessions.find((s) => s.dateISO === todayISO) ?? null;
+    const unfinishedYesterday = !todayEntry
+      ? this.allSessions.find(
+          (s) => s.dateISO === yesterdayISO && s.durationMin === null
+        ) ?? null
+      : null;
+
+    let pickedSummary: WorkoutSessionSummary | null = null;
+    const pinned = this.plugin.settings.pinnedSessionPath;
+    if (pinned && byPath.has(pinned)) {
+      pickedSummary = byPath.get(pinned) ?? null;
+    } else if (todayEntry) {
+      pickedSummary = todayEntry;
+      this.plugin.settings.pinnedSessionPath = todayEntry.path;
+    } else if (unfinishedYesterday) {
+      pickedSummary = unfinishedYesterday;
+      this.plugin.settings.pinnedSessionPath = unfinishedYesterday.path;
+    } else {
+      this.plugin.settings.pinnedSessionPath = "";
+    }
+
+    const hydrated = pickedSummary
+      ? await hydrateWorkoutSession(this.app, pickedSummary)
+      : null;
+    if (this.closed || token !== this.renderToken) return;
+    this.activeSession = hydrated;
+
+    if (
+      !this.plugin.settings.selectedDay ||
+      !DEFAULT_SCHEDULE[this.plugin.settings.selectedDay]
+    ) {
+      this.plugin.settings.selectedDay = hydrated
+        ? hydrated.programDay
+        : currentWeekday;
+    }
+
+    const isPreviewingOtherDay = Boolean(
+      hydrated &&
+        this.plugin.settings.viewMode === "preview" &&
+        this.plugin.settings.selectedDay !== hydrated.programDay
+    );
+    const activeDayNum =
+      hydrated && !isPreviewingOtherDay
+        ? hydrated.programDay
+        : this.plugin.settings.selectedDay || currentWeekday;
+    const program =
+      DEFAULT_SCHEDULE[activeDayNum] ??
+      DEFAULT_SCHEDULE[currentWeekday] ??
+      DEFAULT_SCHEDULE[1]!;
+
+    if (hydrated && !isPreviewingOtherDay) {
+      const exList = getUniqueExercises(program);
+      const draft = this.getDraft(hydrated.path, program, exList);
+      const selectedEx =
+        exList.find((e) => e.key === draft.selectedExKey) ?? exList[0];
+      if (selectedEx) {
+        this.prevRef = await findPreviousExerciseResult(
+          this.app,
+          this.allSessions,
+          hydrated.path,
+          selectedEx.name,
+          draft.customWeight
+        );
+        if (this.closed || token !== this.renderToken) return;
+        // Если в этой сессии ещё не было подходов к этому упражнению, подставляем прошлое значение
+        const hasSetsInCurrent = hydrated.loggedSets.some(
+          (s) => s.name === selectedEx.name
+        );
+        if (!hasSetsInCurrent && this.prevRef && draft.draftReps === 10) {
+          draft.draftReps = this.prevRef.lastReps;
+        }
+      }
+    } else {
+      this.prevRef = null;
+    }
+
+    this.plugin.requestSaveSettings();
+    this.renderHeader(program, activeDayNum, currentWeekday, isPreviewingOtherDay);
+    this.renderTimerSection(program);
+    this.renderBody(program, activeDayNum, todayISO, isPreviewingOtherDay);
+  }
+
+  private renderHeader(
+    program: DayProgramSpec,
+    activeDayNum: number,
+    currentWeekday: number,
+    isPreviewingOtherDay: boolean
+  ): void {
+    this.headerEl.empty();
+
+    const topRow = this.headerEl.createDiv("my-wc-top-row");
+    const titleWrap = topRow.createDiv("my-wc-title-wrap");
+    titleWrap.createDiv({ cls: "my-wc-title", text: program.title });
+    titleWrap.createDiv({ cls: "my-wc-subtitle", text: program.note });
+
+    const controlsRow = this.headerEl.createDiv("my-wc-controls-row");
+    const daysBar = controlsRow.createDiv("my-wc-days-bar");
+
+    DAYS_SHORT.forEach((dName, idx) => {
+      const dNum = idx + 1;
+      const isSelected = dNum === activeDayNum;
+      const btn = daysBar.createEl("button", {
+        cls: "my-wc-day-btn" + (isSelected ? " is-active" : ""),
+        text: dName + (dNum === currentWeekday ? "•" : ""),
+        attr: { type: "button" },
+      });
+      btn.onclick = () => {
+        if (this.activeSession && dNum === this.activeSession.programDay) {
+          this.plugin.settings.selectedDay = dNum;
+          this.plugin.settings.viewMode = "session";
+        } else if (this.activeSession) {
+          this.plugin.settings.selectedDay = dNum;
+          this.plugin.settings.viewMode = "preview";
+        } else {
+          this.plugin.settings.selectedDay = dNum;
+          this.plugin.settings.viewMode = "session";
+        }
+        this.plugin.requestSaveSettings();
+        void this.refreshAll();
+      };
+    });
+
+    if (this.allSessions.length > 0) {
+      const sel = controlsRow.createEl("select", {
+        cls: "dropdown my-wc-session-select",
+        attr: { title: "Выбрать сессию тренировки" },
+      });
+      const todayISO = todayLocalISO();
+      const todayEntry = this.allSessions.find((s) => s.dateISO === todayISO);
+      sel.createEl("option", {
+        value: "__new__",
+        text: todayEntry ? "Сегодняшняя сессия" : "Новая / выбор дня",
+      });
+      for (const s of this.allSessions.slice(0, 15)) {
+        const shortT = s.title.split("·")[1]?.trim() || s.title;
+        const dayLabel = DAYS_SHORT[(s.programDay || 1) - 1] ?? "";
+        const o = sel.createEl("option", {
+          value: s.path,
+          text: `${formatShortDateRu(s.dateISO)} · ${dayLabel} (${shortT})`,
+        });
+        if (
+          this.activeSession &&
+          this.activeSession.path === s.path &&
+          !isPreviewingOtherDay
+        ) {
+          o.selected = true;
+        }
+      }
+      if (!this.activeSession || isPreviewingOtherDay) {
+        sel.value = "__new__";
+      }
+      sel.onchange = () => {
+        if (sel.value === "__new__") {
+          if (todayEntry) {
+            this.plugin.settings.pinnedSessionPath = todayEntry.path;
+            this.plugin.settings.selectedDay = todayEntry.programDay;
+            this.plugin.settings.viewMode = "session";
+          } else {
+            this.plugin.settings.pinnedSessionPath = "";
+            this.plugin.settings.viewMode = "preview";
+          }
+        } else {
+          const picked = this.allSessions.find((x) => x.path === sel.value);
+          if (picked) {
+            this.plugin.settings.pinnedSessionPath = picked.path;
+            this.plugin.settings.selectedDay = picked.programDay;
+            this.plugin.settings.viewMode = "session";
+          }
+        }
+        this.plugin.requestSaveSettings();
+        void this.refreshAll();
+      };
+    }
+  }
+
+  private renderTimerSection(program: DayProgramSpec): void {
+    this.timerCardEl.empty();
+
+    const top = this.timerCardEl.createDiv("my-wc-timer-top");
+    const infoCol = top.createDiv("my-wc-timer-info");
+    infoCol.createDiv({ cls: "my-wc-timer-label", text: "Таймер отдыха" });
+    this.timerStatusEl = infoCol.createDiv({
+      cls: "my-wc-timer-status",
+      text: "Готов к запуску",
+    });
+
+    this.timerTimeEl = top.createDiv({
+      cls: "my-wc-timer-digits",
+      text: "00:00",
+    });
+
+    const barTrack = this.timerCardEl.createDiv("my-wc-timer-track");
+    this.timerFillEl = barTrack.createDiv("my-wc-timer-fill");
+
+    const presetsRow = this.timerCardEl.createDiv("my-wc-timer-presets");
+    const sessionPath = this.activeSession?.path ?? "";
+    const curDefault =
+      (sessionPath
+        ? this.plugin.settings.draftBySession[sessionPath]?.restDurationSec
+        : undefined) ??
+      this.plugin.settings.timer.durationSec ??
+      program.restBetweenSets;
+
+    for (const sec of REST_PRESETS) {
+      const label = sec % 60 === 0 ? `${sec / 60} мин` : `${sec} с`;
+      const btn = presetsRow.createEl("button", {
+        cls: "my-wc-preset-btn" + (curDefault === sec ? " is-active" : ""),
+        text: label,
+        attr: { type: "button" },
+      });
+      btn.onclick = () => {
+        if (sessionPath && this.plugin.settings.draftBySession[sessionPath]) {
+          this.plugin.settings.draftBySession[sessionPath]!.restDurationSec = sec;
+        }
+        this.plugin.timer.start(sessionPath, sec);
+        this.renderTimerSection(program);
+      };
+    }
+
+    const add30Btn = presetsRow.createEl("button", {
+      cls: "my-wc-preset-btn",
+      text: "+30 с",
+      attr: { type: "button", title: "Добавить 30 секунд отдыха" },
+    });
+    add30Btn.onclick = () => {
+      this.plugin.timer.addSeconds(30);
+    };
+
+    const resetBtn = presetsRow.createEl("button", {
+      cls: "my-wc-preset-btn is-muted",
+      text: "Сброс",
+      attr: { type: "button" },
+    });
+    resetBtn.onclick = () => {
+      this.plugin.timer.reset(curDefault);
+    };
+
+    this.updateTimerDisplayDOM(this.plugin.timer.getState(), Date.now());
+  }
+
+  private updateTimerDisplayDOM(state: ActiveRestTimerState, now: number): void {
+    if (!this.timerTimeEl || !this.timerStatusEl || !this.timerFillEl) return;
+
+    if (state.endAt > now) {
+      const remMs = state.endAt - now;
+      const remSec = Math.max(0, Math.ceil(remMs / 1000));
+      const totalMs = Math.max(1000, state.durationSec * 1000);
+      const pct = Math.min(100, Math.max(0, (remMs / totalMs) * 100));
+
+      this.timerTimeEl.setText(formatSecondsMMSS(remSec));
+      this.timerTimeEl.className = "my-wc-timer-digits is-running";
+      const endDate = new Date(state.endAt);
+      const p = (n: number) => String(n).padStart(2, "0");
+      this.timerStatusEl.setText(
+        `Идёт отдых · до ${p(endDate.getHours())}:${p(endDate.getMinutes())}:${p(endDate.getSeconds())}`
+      );
+      this.timerFillEl.style.width = `${pct}%`;
+      return;
+    }
+
+    const finishedAt = this.plugin.timer.getLastFinishedBannerEndAt();
+    if (finishedAt > 0 && now - finishedAt < 120_000) {
+      const agoSec = Math.max(0, Math.round((now - finishedAt) / 1000));
+      this.timerTimeEl.setText("00:00");
+      this.timerTimeEl.className = "my-wc-timer-digits is-done";
+      this.timerStatusEl.setText(
+        agoSec >= 3
+          ? `Отдых завершён (${agoSec} с назад) — пора на подход!`
+          : "Отдых завершён — пора на подход!"
+      );
+      this.timerFillEl.style.width = "100%";
+      return;
+    }
+
+    this.timerTimeEl.setText("00:00");
+    this.timerTimeEl.className = "my-wc-timer-digits";
+    this.timerStatusEl.setText(`Выбран отдых: ${state.durationSec || 120} с`);
+    this.timerFillEl.style.width = "0%";
+  }
+
+  private renderBody(
+    program: DayProgramSpec,
+    activeDayNum: number,
+    todayISO: string,
+    isPreviewingOtherDay: boolean
+  ): void {
+    this.bodyEl.empty();
+
+    if (isPreviewingOtherDay && this.activeSession) {
+      const banner = this.bodyEl.createDiv("my-wc-preview-banner");
+      banner.createSpan({
+        text: `Просмотр дня «${program.title}». Открыта сессия от ${formatShortDateRu(this.activeSession.dateISO)}.`,
+      });
+      const backBtn = banner.createEl("button", {
+        cls: "mod-cta my-wc-btn",
+        text: "↩ К активной сессии",
+        attr: { type: "button" },
+      });
+      backBtn.onclick = () => {
+        if (!this.activeSession) return;
+        this.plugin.settings.selectedDay = this.activeSession.programDay;
+        this.plugin.settings.viewMode = "session";
+        this.plugin.requestSaveSettings();
+        void this.refreshAll();
+      };
+    }
+
+    if (program.isRestDay && (!this.activeSession || isPreviewingOtherDay)) {
+      const restBox = this.bodyEl.createDiv("my-wc-empty-box");
+      restBox.createDiv({
+        cls: "my-wc-empty-title",
+        text: "🌿 День отдыха и восстановления",
+      });
+      restBox.createDiv({
+        cls: "my-wc-empty-sub",
+        text: "Мышцы и ЦНС восстанавливаются. Прогулка, сон и питание.",
+      });
+      return;
+    }
+
+    if (!this.activeSession || isPreviewingOtherDay) {
+      const startBox = this.bodyEl.createDiv("my-wc-empty-box");
+      const startBtn = startBox.createEl("button", {
+        cls: "mod-cta my-wc-primary-btn",
+        text: "▶ Начать тренировку (создать сессию за сегодня)",
+        attr: { type: "button" },
+      });
+      startBtn.onclick = async () => {
+        startBtn.disabled = true;
+        this.plugin.timer.unlockAudioOnUserGesture();
+        try {
+          const file = await createOrOpenWorkoutSessionFile(
+            this.app,
+            this.plugin.settings,
+            todayISO,
+            program
+          );
+          this.plugin.settings.pinnedSessionPath = file.path;
+          this.plugin.settings.selectedDay = activeDayNum;
+          this.plugin.settings.viewMode = "session";
+          this.plugin.requestSaveSettings();
+          new Notice(`Тренировка начата: ${program.title}`);
+          await this.refreshAll();
+        } catch (err: unknown) {
+          new Notice(
+            "Ошибка создания сессии: " +
+              (err instanceof Error ? err.message : String(err))
+          );
+          startBtn.disabled = false;
+        }
+      };
+      return;
+    }
+
+    const session = this.activeSession;
+    const exList = getUniqueExercises(program);
+    const draft = this.getDraft(session.path, program, exList);
+    const selectedEx =
+      exList.find((e) => e.key === draft.selectedExKey) ?? exList[0]!;
+    const exMeta = getExerciseMeta(selectedEx.name);
+
+    // Карточка быстрого ввода подхода (одной рукой на iPad)
+    const loggerCard = this.bodyEl.createDiv("my-wc-logger-card");
+
+    const exRow = loggerCard.createDiv("my-wc-ex-row");
+    const exSelect = exRow.createEl("select", {
+      cls: "dropdown my-wc-ex-select",
+    });
+    for (const e of exList) {
+      const wLabel = e.weight > 0 ? `+${e.weight} кг` : "свой вес";
+      const o = exSelect.createEl("option", {
+        value: e.key,
+        text: `${e.name} (${wLabel} · цель ${e.target})`,
+      });
+      if (e.key === selectedEx.key) o.selected = true;
+    }
+    exSelect.onchange = () => {
+      const picked = exList.find((e) => e.key === exSelect.value);
+      if (!picked) return;
+      draft.selectedExKey = picked.key;
+      draft.customWeight = picked.weight;
+      draft.restDurationSec = picked.rest || program.restBetweenSets || 120;
+      if (this.plugin.settings.timer.endAt <= Date.now()) {
+        this.plugin.settings.timer.durationSec = draft.restDurationSec;
+      }
+      this.plugin.requestSaveSettings();
+      void this.refreshAll();
+    };
+
+    if (this.prevRef) {
+      const refBar = loggerCard.createDiv("my-wc-prev-ref");
+      const wStr =
+        this.prevRef.weight > 0 ? `+${this.prevRef.weight} кг` : "свой вес";
+      refBar.setText(
+        `В прошлый раз (${formatShortDateRu(this.prevRef.dateISO)}, ${wStr}): ${this.prevRef.sets.join(" · ")} ${exMeta.unit} (лучший: ${this.prevRef.best})`
+      );
+    }
+
+    // Блок 2: Степперы «Доп. вес (кг)» и «Повторения / Секунды» с крупными кнопками 44px
+    const steppersGrid = loggerCard.createDiv("my-wc-steppers-grid");
+
+    // 1. Вес
+    const weightBox = steppersGrid.createDiv("my-wc-stepper-box");
+    weightBox.createDiv({ cls: "my-wc-stepper-label", text: "Доп. вес (кг)" });
+    const wControls = weightBox.createDiv("my-wc-stepper-controls");
+
+    const wMinusBtn = wControls.createEl("button", {
+      cls: "my-wc-step-btn",
+      text: "−2",
+      attr: { type: "button" },
+    });
+    const wInput = wControls.createEl("input", {
+      cls: "my-wc-step-input",
+      attr: {
+        type: "number",
+        inputmode: "decimal",
+        min: "0",
+        max: "500",
+        step: "0.5",
+      },
+    });
+    wInput.value = String(draft.customWeight);
+    const wPlusBtn = wControls.createEl("button", {
+      cls: "my-wc-step-btn",
+      text: "+2",
+      attr: { type: "button" },
+    });
+    const wZeroBtn = wControls.createEl("button", {
+      cls: "my-wc-step-btn is-subtle",
+      text: "0",
+      attr: { type: "button", title: "Свой вес (0 кг)" },
+    });
+
+    const applyWeight = (nextW: number) => {
+      const clean = Math.max(0, Math.min(500, Math.round(nextW * 2) / 2));
+      draft.customWeight = clean;
+      wInput.value = String(clean);
+      this.plugin.requestSaveSettings();
+    };
+    wMinusBtn.onclick = () => applyWeight(( Number(wInput.value) || 0) - 2);
+    wPlusBtn.onclick = () => applyWeight((Number(wInput.value) || 0) + 2);
+    wZeroBtn.onclick = () => applyWeight(0);
+    wInput.oninput = () => {
+      const n = Number(wInput.value.replace(",", "."));
+      if (Number.isFinite(n) && n >= 0) {
+        draft.customWeight = n;
+        this.plugin.requestSaveSettings();
+      }
+    };
+
+    // 2. Повторения / Секунды
+    const repsBox = steppersGrid.createDiv("my-wc-stepper-box");
+    repsBox.createDiv({
+      cls: "my-wc-stepper-label",
+      text:
+        exMeta.field === "секунды"
+          ? `Секунды (цель: ${selectedEx.target})`
+          : `Повторения (цель: ${selectedEx.target})`,
+    });
+    const rControls = repsBox.createDiv("my-wc-stepper-controls");
+
+    const rMinusBtn = rControls.createEl("button", {
+      cls: "my-wc-step-btn",
+      text: "−1",
+      attr: { type: "button" },
+    });
+    const rInput = rControls.createEl("input", {
+      cls: "my-wc-step-input",
+      attr: {
+        type: "number",
+        inputmode: "numeric",
+        min: "1",
+        max: "600",
+        step: "1",
+      },
+    });
+    rInput.value = String(draft.draftReps || 10);
+    const rPlus1Btn = rControls.createEl("button", {
+      cls: "my-wc-step-btn",
+      text: "+1",
+      attr: { type: "button" },
+    });
+    const rPlus2Btn = rControls.createEl("button", {
+      cls: "my-wc-step-btn",
+      text: "+2",
+      attr: { type: "button" },
+    });
+
+    const applyReps = (nextR: number) => {
+      const clean = Math.max(1, Math.min(600, Math.round(nextR)));
+      draft.draftReps = clean;
+      rInput.value = String(clean);
+      this.plugin.requestSaveSettings();
+    };
+    rMinusBtn.onclick = () => applyReps((Number(rInput.value) || 1) - 1);
+    rPlus1Btn.onclick = () => applyReps((Number(rInput.value) || 1) + 1);
+    rPlus2Btn.onclick = () => applyReps((Number(rInput.value) || 1) + 2);
+    rInput.oninput = () => {
+      const n = Math.round(Number(rInput.value));
+      if (Number.isFinite(n) && n >= 1) {
+        draft.draftReps = n;
+        this.plugin.requestSaveSettings();
+      }
+    };
+
+    const submitBtn = loggerCard.createEl("button", {
+      cls: "mod-cta my-wc-primary-btn",
+      text: `✓ Записать подход и запустить отдых (${draft.restDurationSec} с)`,
+      attr: { type: "button" },
+    });
+
+    const doSubmitSet = async () => {
+      if (submitBtn.disabled) return;
+      this.plugin.timer.unlockAudioOnUserGesture();
+
+      const repsVal = Math.round(Number(rInput.value));
+      if (!Number.isFinite(repsVal) || repsVal < 1 || repsVal > 600) {
+        new Notice("Укажи число повторений от 1 до 600.");
+        return;
+      }
+      const weightVal = Math.max(
+        0,
+        Number(String(wInput.value).replace(",", ".")) || 0
+      );
+
+      submitBtn.disabled = true;
+      try {
+        await appendSetToWorkoutFile(
+          this.app,
+          this.plugin.settings,
+          session,
+          selectedEx.name,
+          repsVal,
+          weightVal,
+          "Основной"
+        );
+        draft.customWeight = weightVal;
+        draft.draftReps = repsVal;
+        this.plugin.timer.start(session.path, draft.restDurationSec);
+        new Notice(
+          `Записано: ${selectedEx.name} — ${repsVal} ${exMeta.unit}` +
+            (weightVal > 0 ? ` (+${weightVal} кг)` : "")
+        );
+        await this.refreshAll();
+      } catch (err: unknown) {
+        new Notice(
+          "Ошибка записи подхода: " +
+            (err instanceof Error ? err.message : String(err))
+        );
+        submitBtn.disabled = false;
+      }
+    };
+
+    submitBtn.onclick = () => void doSubmitSet();
+
+    // Прогресс объёмных подтягиваний по четвергам (цель 100)
+    if (program.isVolumePullups) {
+      const pullupsSum = session.loggedSets
+        .filter((s) => s.name === "Подтягивания")
+        .reduce((acc, s) => acc + s.reps, 0);
+      const target = program.targetVolume || 100;
+      const pct = Math.min(100, Math.round((pullupsSum / target) * 100));
+
+      const volBox = this.bodyEl.createDiv("my-wc-volume-box");
+      volBox.createDiv({
+        cls: "my-wc-volume-text",
+        text: `Объём подтягиваний за сессию: ${pullupsSum} из ${target} (${pct}%)`,
+      });
+      const vTrack = volBox.createDiv("my-wc-timer-track");
+      const vFill = vTrack.createDiv("my-wc-volume-fill");
+      vFill.style.width = `${pct}%`;
+    }
+
+    // Список выполненных за сегодня подходов + удаление ошибочного подхода + завершение тренировки
+    const setsSection = this.bodyEl.createDiv("my-wc-sets-section");
+    const setsHead = setsSection.createDiv("my-wc-sets-head");
+    setsHead.createSpan({
+      cls: "my-wc-sets-title",
+      text: `Выполнено в сессии · ${session.loggedSets.length}`,
+    });
+
+    const sessionActions = setsHead.createDiv("my-wc-sets-actions");
+    const openNoteBtn = sessionActions.createEl("button", {
+      cls: "my-wc-btn",
+      text: "📄 Заметка",
+      attr: { type: "button", title: "Открыть файл тренировки" },
+    });
+    openNoteBtn.onclick = () => {
+      this.close();
+      void this.app.workspace.openLinkText(session.path, "", false);
+    };
+
+    const finishBtn = sessionActions.createEl("button", {
+      cls: "my-wc-btn",
+      text: session.durationMin
+        ? `✓ Завершена (${session.durationMin} мин)`
+        : "✓ Завершить тренировку",
+      attr: { type: "button" },
+    });
+    finishBtn.onclick = async () => {
+      finishBtn.disabled = true;
+      try {
+        const dur = computeSessionDurationMinutes(
+          session.startStr,
+          session.durationMin
+        );
+        await this.app.fileManager.processFrontMatter(
+          session.file,
+          (fm: Record<string, unknown>) => {
+            fm[WORKOUT_KEYS.durationMin] = dur;
+            if (!fm[WORKOUT_KEYS.programDay]) {
+              fm[WORKOUT_KEYS.programDay] = session.programDay;
+            }
+          }
+        );
+        await syncWorkoutHabitToDiary(
+          this.app,
+          this.plugin.settings,
+          session.dateISO || todayISO
+        );
+        new Notice(`Тренировка завершена (${dur} мин)`);
+        await this.refreshAll();
+      } catch (err: unknown) {
+        new Notice(
+          "Ошибка завершения: " +
+            (err instanceof Error ? err.message : String(err))
+        );
+        finishBtn.disabled = false;
+      }
+    };
+
+    if (session.loggedSets.length === 0) {
+      setsSection.createDiv({
+        cls: "my-wc-sets-empty",
+        text: "Подходов в этой сессии пока нет.",
+      });
+    } else {
+      const pillsList = setsSection.createDiv("my-wc-sets-list");
+      session.loggedSets.forEach((s, idx) => {
+        const meta = getExerciseMeta(s.name);
+        const wText = s.weight > 0 ? ` +${s.weight} кг` : "";
+        const pill = pillsList.createDiv("my-wc-set-pill");
+        pill.createSpan({
+          text: `${idx + 1}. ${s.name}: ${s.reps} ${meta.unit}${wText}`,
+        });
+
+        const delBtn = pill.createEl("button", {
+          cls: "my-wc-set-del",
+          attr: { type: "button", title: "Удалить этот подход" },
+        });
+        setIcon(delBtn, "x");
+        delBtn.onclick = async () => {
+          delBtn.disabled = true;
+          await deleteSetFromWorkoutFile(this.app, session.file, s.lineIndex);
+          await this.refreshAll();
+        };
+      });
+    }
+  }
+}
+
+=== FILE: ./src/main.ts ===
+import { App, Plugin, PluginSettingTab, Setting } from "obsidian";
+import {
+  ActiveRestTimerState,
+  DEFAULT_SETTINGS,
+  SessionDraftState,
+  WorkoutPluginSettings,
+} from "./types";
+import { OpenWorkoutOptions, WorkoutCompanionModal } from "./modal";
+import { WorkoutRestTimerService } from "./timer";
+
+function migrateSettings(raw: unknown): WorkoutPluginSettings {
+  const s =
+    raw && typeof raw === "object"
+      ? (raw as Partial<WorkoutPluginSettings>)
+      : {};
+
+  const timerRaw =
+    s.timer && typeof s.timer === "object"
+      ? (s.timer as Partial<ActiveRestTimerState>)
+      : {};
+  const timer: ActiveRestTimerState = {
+    sessionPath:
+      typeof timerRaw.sessionPath === "string" ? timerRaw.sessionPath : "",
+    startAt: typeof timerRaw.startAt === "number" ? timerRaw.startAt : 0,
+    endAt: typeof timerRaw.endAt === "number" ? timerRaw.endAt : 0,
+    durationSec:
+      typeof timerRaw.durationSec === "number" && timerRaw.durationSec > 0
+        ? timerRaw.durationSec
+        : 120,
+    notifiedEndAt:
+      typeof timerRaw.notifiedEndAt === "number" ? timerRaw.notifiedEndAt : 0,
+  };
+
+  const draftBySession: Record<string, SessionDraftState> = {};
+  if (s.draftBySession && typeof s.draftBySession === "object") {
+    for (const [k, v] of Object.entries(
+      s.draftBySession as Record<string, unknown>
+    )) {
+      if (v && typeof v === "object") {
+        const d = v as Partial<SessionDraftState>;
+        draftBySession[k] = {
+          selectedExKey:
+            typeof d.selectedExKey === "string" ? d.selectedExKey : "",
+          customWeight:
+            typeof d.customWeight === "number" ? d.customWeight : 0,
+          draftReps: typeof d.draftReps === "number" ? d.draftReps : 10,
+          restDurationSec:
+            typeof d.restDurationSec === "number" && d.restDurationSec > 0
+              ? d.restDurationSec
+              : 120,
+        };
+      }
+    }
+  }
+
+  return {
+    workoutsFolder:
+      typeof s.workoutsFolder === "string" && s.workoutsFolder.trim()
+        ? s.workoutsFolder.trim()
+        : DEFAULT_SETTINGS.workoutsFolder,
+    diaryFolder:
+      typeof s.diaryFolder === "string" && s.diaryFolder.trim()
+        ? s.diaryFolder.trim()
+        : DEFAULT_SETTINGS.diaryFolder,
+    soundEnabled:
+      typeof s.soundEnabled === "boolean"
+        ? s.soundEnabled
+        : DEFAULT_SETTINGS.soundEnabled,
+    pinnedSessionPath:
+      typeof s.pinnedSessionPath === "string" ? s.pinnedSessionPath : "",
+    selectedDay:
+      typeof s.selectedDay === "number" ? s.selectedDay : 0,
+    viewMode: s.viewMode === "preview" ? "preview" : "session",
+    timer,
+    draftBySession,
+  };
+}
+
+class WorkoutCompanionSettingTab extends PluginSettingTab {
+  plugin: MyWorkoutCompanionPlugin;
+
+  constructor(app: App, plugin: MyWorkoutCompanionPlugin) {
+    super(app, plugin);
+    this.plugin = plugin;
+  }
+
+  display(): void {
+    const { containerEl } = this;
+    containerEl.empty();
+    containerEl.createEl("h3", { text: "Тренировки и таймер" });
+
+    new Setting(containerEl)
+      .setName("Папка файлов тренировок")
+      .setDesc("По умолчанию: Знания (файлы «Тренировка ГГГГ-ММ-ДД.md»)")
+      .addText((text) =>
+        text
+          .setValue(this.plugin.settings.workoutsFolder)
+          .onChange((val) => {
+            this.plugin.settings.workoutsFolder =
+              val.trim() || DEFAULT_SETTINGS.workoutsFolder;
+            this.plugin.requestSaveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName("Папка ежедневника")
+      .setDesc("По умолчанию: Ежедневник (для автоотметки «тренировка: true»)")
+      .addText((text) =>
+        text.setValue(this.plugin.settings.diaryFolder).onChange((val) => {
+          this.plugin.settings.diaryFolder =
+            val.trim() || DEFAULT_SETTINGS.diaryFolder;
+          this.plugin.requestSaveSettings();
+        })
+      );
+
+    new Setting(containerEl)
+      .setName("Звуковой сигнал таймера отдыха")
+      .setDesc(
+        "Короткий сигнал через Web Audio API по окончании отдыха (работает при открытом экране Obsidian и включённом звуке на устройстве)"
+      )
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.settings.soundEnabled)
+          .onChange((val) => {
+            this.plugin.settings.soundEnabled = val;
+            this.plugin.requestSaveSettings();
+          })
+      );
+  }
+}
+
+export default class MyWorkoutCompanionPlugin extends Plugin {
+  settings!: WorkoutPluginSettings;
+  timer!: WorkoutRestTimerService;
+  private saveTimer: number | null = null;
+
+  async onload() {
+    this.settings = migrateSettings(await this.loadData());
+    this.timer = new WorkoutRestTimerService(this);
+    this.addSettingTab(new WorkoutCompanionSettingTab(this.app, this));
+
+    this.addRibbonIcon("Flame", "Открыть терминал тренировки", () => {
+      this.openWorkout();
+    });
+
+    this.registerObsidianProtocolHandler("my-workout", (params) => {
+      this.openWorkout({
+        sessionPath: params.session || undefined,
+        dayNumber: params.day ? Number(params.day) : undefined,
+      });
+    });
+
+    this.addCommand({
+      id: "open-workout-companion",
+      name: "Открыть терминал тренировки",
+      callback: () => this.openWorkout(),
+    });
+
+    this.registerDomEvent(document, "visibilitychange", () => {
+      if (document.visibilityState === "visible") {
+        this.timer.checkAndSyncNow();
+      }
+    });
+    this.registerDomEvent(window, "focus", () => {
+      this.timer.checkAndSyncNow();
+    });
+
+    this.app.workspace.onLayoutReady(() => {
+      this.timer.checkAndSyncNow();
+    });
+  }
+
+  openWorkout(options: OpenWorkoutOptions = {}) {
+    new WorkoutCompanionModal(this.app, this, options).open();
+  }
+
+  requestSaveSettings() {
+    if (this.saveTimer !== null) window.clearTimeout(this.saveTimer);
+    this.saveTimer = window.setTimeout(() => {
+      this.saveTimer = null;
+      void this.saveData(this.settings);
+    }, 250);
+  }
+
+  onunload() {
+    if (this.saveTimer !== null) {
+      window.clearTimeout(this.saveTimer);
+      this.saveTimer = null;
+    }
+    this.timer?.destroy();
+  }
+}
+
+=== FILE: ./src/scanner.ts ===
+import { App, TFile, normalizePath } from "obsidian";
+import {
+  DEFAULT_SCHEDULE,
+  DayProgramSpec,
+  EXERCISES_CATALOG,
+  ExerciseCatalogItem,
+  ExerciseFieldKind,
+  HydratedWorkoutSession,
+  LoggedWorkoutSet,
+  MANUAL_HABITS_PREFIX,
+  WORKOUT_KEYS,
+  WORKOUT_TYPE_VALUE,
+  WorkoutPluginSettings,
+  WorkoutSessionSummary,
+} from "./types";
+
+const SET_LINE_REGEX =
+  /-\s*\(упражнение::\s*([^)]+)\)\s*\((повторы|секунды)::\s*(\d+(?:[.,]\d+)?)\)\s*\(доп_вес_кг::\s*([\d.,]+)\)\s*\(вариант::\s*([^)]+)\)/;
+
+const CATALOG_MAP = new Map<string, ExerciseCatalogItem>(
+  EXERCISES_CATALOG.map((e) => [e.name, e])
+);
+
+export function getExerciseMeta(name: string): ExerciseCatalogItem {
+  return (
+    CATALOG_MAP.get(name) ?? {
+      name,
+      unit: "повт.",
+      field: "повторы",
+    }
+  );
+}
+
+export function todayLocalISO(): string {
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+export function yesterdayLocalISO(): string {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+export function currentTimeHHMM(): string {
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+export function isoWeekdayOf(iso: string): number {
+  const parts = iso.split("-").map(Number);
+  const y = parts[0];
+  const m = parts[1];
+  const d = parts[2];
+  if (!y || !m || !d) {
+    const day = new Date().getDay();
+    return day === 0 ? 7 : day;
+  }
+  const dt = new Date(y, m - 1, d);
+  const day = dt.getDay();
+  return day === 0 ? 7 : day;
+}
+
+export function formatShortDateRu(iso: string): string {
+  const parts = iso.split("-");
+  if (parts.length !== 3) return iso;
+  return `${parts[2]}.${parts[1]}`;
+}
+
+function readStr(v: unknown): string {
+  return v === null || v === undefined ? "" : String(v).trim();
+}
+
+function readNum(v: unknown): number | null {
+  if (typeof v === "number") return Number.isFinite(v) ? v : null;
+  if (typeof v !== "string") return null;
+  const s = v.trim().replace(",", ".");
+  if (!s) return null;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
+}
+
+function extractISODate(v: unknown): string {
+  const s = readStr(v).slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : "";
+}
+
+export function resolveProgramDay(
+  fm: Record<string, unknown>,
+  fallbackDateISO: string
+): number {
+  const explicit = readNum(fm[WORKOUT_KEYS.programDay]);
+  if (explicit && DEFAULT_SCHEDULE[explicit]) return explicit;
+
+  const title = readStr(fm[WORKOUT_KEYS.title]);
+  if (title) {
+    for (const [k, prog] of Object.entries(DEFAULT_SCHEDULE)) {
+      if (prog.title === title) return Number(k);
+    }
+    const low = title.toLowerCase();
+    const prefixes: Array<[string, number]> = [
+      ["понедельник", 1],
+      ["вторник", 2],
+      ["среда", 3],
+      ["четверг", 4],
+      ["пятница", 5],
+      ["суббота", 6],
+      ["воскресенье", 7],
+    ];
+    for (const [pref, dNum] of prefixes) {
+      if (low.startsWith(pref)) return dNum;
+    }
+  }
+
+  return isoWeekdayOf(fallbackDateISO || todayLocalISO());
+}
+
+export function parseSetsFromContent(content: string): LoggedWorkoutSet[] {
+  const sets: LoggedWorkoutSet[] = [];
+  if (!content) return sets;
+  const lines = content.split(/\r?\n/);
+
+  lines.forEach((line, idx) => {
+    const m = line.match(SET_LINE_REGEX);
+    if (!m) return;
+    const name = (m[1] ?? "").trim();
+    const fieldRaw = (m[2] ?? "").trim();
+    const field: ExerciseFieldKind =
+      fieldRaw === "секунды" ? "секунды" : "повторы";
+    const val = Number((m[3] ?? "").replace(",", "."));
+    const weight = Number((m[4] ?? "").replace(",", "."));
+    const variant = (m[5] ?? "").trim() || "Основной";
+    if (
+      name &&
+      Number.isFinite(val) &&
+      val > 0 &&
+      Number.isFinite(weight) &&
+      weight >= 0
+    ) {
+      sets.push({ lineIndex: idx, name, field, reps: val, weight, variant });
+    }
+  });
+
+  return sets;
+}
+
+export function collectWorkoutSessions(
+  app: App,
+  settings: WorkoutPluginSettings
+): WorkoutSessionSummary[] {
+  const folderPrefix =
+    normalizePath(settings.workoutsFolder || "Знания").replace(/\/+$/, "") + "/";
+  const result: WorkoutSessionSummary[] = [];
+
+  for (const file of app.vault.getMarkdownFiles()) {
+    if (!file.path.startsWith(folderPrefix)) continue;
+    const fm = app.metadataCache.getFileCache(file)?.frontmatter;
+    const isWorkoutByFm = fm && readStr(fm[WORKOUT_KEYS.type]) === WORKOUT_TYPE_VALUE;
+    const isWorkoutByName = /^Тренировка\s+\d{4}-\d{2}-\d{2}$/i.test(file.basename);
+    if (!isWorkoutByFm && !isWorkoutByName) continue;
+
+    const fallbackDate = extractISODate(
+      file.basename.replace(/^Тренировка\s+/i, "")
+    );
+    const dateISO =
+      (fm ? extractISODate(fm[WORKOUT_KEYS.date]) : "") || fallbackDate;
+    const programDay = resolveProgramDay(fm ?? {}, dateISO);
+    const durationMin = fm ? readNum(fm[WORKOUT_KEYS.durationMin]) : null;
+    const startStr = fm ? readStr(fm[WORKOUT_KEYS.start]) : "";
+    const title =
+      (fm ? readStr(fm[WORKOUT_KEYS.title]) : "") ||
+      DEFAULT_SCHEDULE[programDay]?.title ||
+      file.basename;
+
+    result.push({
+      file,
+      path: file.path,
+      dateISO,
+      programDay,
+      durationMin,
+      startStr,
+      title,
+    });
+  }
+
+  result.sort(
+    (a, b) =>
+      b.dateISO.localeCompare(a.dateISO) || b.path.localeCompare(a.path, "ru")
+  );
+  return result;
+}
+
+export async function hydrateWorkoutSession(
+  app: App,
+  summary: WorkoutSessionSummary
+): Promise<HydratedWorkoutSession> {
+  let content = "";
+  try {
+    content = await app.vault.read(summary.file);
+  } catch {
+    content = "";
+  }
+  return {
+    ...summary,
+    loggedSets: parseSetsFromContent(content),
+  };
+}
+
+export interface PreviousExerciseReference {
+  dateISO: string;
+  sets: number[];
+  best: number;
+  lastReps: number;
+  weight: number;
+}
+
+/**
+ * Находит последнюю прошлую тренировку, где выполнялось это упражнение (с тем же весом или вообще),
+ * чтобы предзаполнить поле повторений и показать ориентир.
+ */
+export async function findPreviousExerciseResult(
+  app: App,
+  allSessions: WorkoutSessionSummary[],
+  currentSessionPath: string,
+  exerciseName: string,
+  targetWeight: number
+): Promise<PreviousExerciseReference | null> {
+  const candidates = allSessions
+    .filter((s) => s.path !== currentSessionPath)
+    .slice(0, 25);
+
+  let fallbackOtherWeight: PreviousExerciseReference | null = null;
+
+  for (const sess of candidates) {
+    let content = "";
+    try {
+      content = await app.vault.cachedRead(sess.file);
+    } catch {
+      continue;
+    }
+    const sets = parseSetsFromContent(content).filter(
+      (s) => s.name === exerciseName
+    );
+    if (sets.length === 0) continue;
+
+    const exactWeightSets = sets.filter(
+      (s) => Math.abs(s.weight - targetWeight) < 0.01
+    );
+    if (exactWeightSets.length > 0) {
+      const vals = exactWeightSets.map((s) => s.reps);
+      return {
+        dateISO: sess.dateISO,
+        sets: vals,
+        best: Math.max(...vals),
+        lastReps: vals[0] ?? 10,
+        weight: targetWeight,
+      };
+    }
+
+    if (!fallbackOtherWeight) {
+      const firstWeight = sets[0]?.weight ?? 0;
+      const sameFirst = sets
+        .filter((s) => Math.abs(s.weight - firstWeight) < 0.01)
+        .map((s) => s.reps);
+      fallbackOtherWeight = {
+        dateISO: sess.dateISO,
+        sets: sameFirst,
+        best: Math.max(...sameFirst),
+        lastReps: sameFirst[0] ?? 10,
+        weight: firstWeight,
+      };
+    }
+  }
+
+  return fallbackOtherWeight;
+}
+
+export async function ensureFolder(app: App, folderPath: string): Promise<void> {
+  let current = "";
+  for (const part of normalizePath(folderPath).split("/").filter(Boolean)) {
+    current = current ? `${current}/${part}` : part;
+    if (!app.vault.getAbstractFileByPath(current)) {
+      try {
+        await app.vault.createFolder(current);
+      } catch {
+        // уже существует
+      }
+    }
+  }
+}
+
+export function clearManualHabitOverrideForDate(
+  dateISO: string,
+  habitKey: string
+): void {
+  try {
+    const storageKey = MANUAL_HABITS_PREFIX + dateISO;
+    const raw = window.localStorage?.getItem(storageKey);
+    if (!raw) return;
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    if (parsed && typeof parsed === "object" && habitKey in parsed) {
+      delete parsed[habitKey];
+      window.localStorage?.setItem(storageKey, JSON.stringify(parsed));
+    }
+  } catch {
+    // игнорируем
+  }
+}
+
+/**
+ * Синхронизирует `тренировка: true` в заметку ежедневника по правилу health.js:
+ * сначала ищет `Ежедневник/YYYY-MM-DD.md`, затем любую заметку в папке `Ежедневник` с `дата: YYYY-MM-DD`.
+ * Если заметки за эту дату ещё нет — создаёт её.
+ */
+export async function syncWorkoutHabitToDiary(
+  app: App,
+  settings: WorkoutPluginSettings,
+  targetDateISO: string
+): Promise<void> {
+  if (!targetDateISO) return;
+  clearManualHabitOverrideForDate(targetDateISO, WORKOUT_KEYS.diaryWorkoutFlag);
+
+  const diaryFolder = normalizePath(settings.diaryFolder || "Ежедневник").replace(
+    /\/+$/,
+    ""
+  );
+  const directPath = normalizePath(`${diaryFolder}/${targetDateISO}.md`);
+  let diaryFile: TFile | null = null;
+
+  const directAbstract = app.vault.getAbstractFileByPath(directPath);
+  if (directAbstract instanceof TFile) {
+    diaryFile = directAbstract;
+  } else {
+    const prefix = `${diaryFolder}/`;
+    for (const f of app.vault.getMarkdownFiles()) {
+      if (!f.path.startsWith(prefix)) continue;
+      const fm = app.metadataCache.getFileCache(f)?.frontmatter;
+      if (fm && extractISODate(fm[WORKOUT_KEYS.date]) === targetDateISO) {
+        diaryFile = f;
+        break;
+      }
+    }
+  }
+
+  if (!diaryFile) {
+    await ensureFolder(app, diaryFolder);
+    const content = [
+      "---",
+      `${WORKOUT_KEYS.date}: "${targetDateISO}"`,
+      `${WORKOUT_KEYS.diaryWorkoutFlag}: true`,
+      "---",
+      "",
+    ].join("\n");
+    await app.vault.create(directPath, content);
+    return;
+  }
+
+  await app.fileManager.processFrontMatter(
+    diaryFile,
+    (fm: Record<string, unknown>) => {
+      fm[WORKOUT_KEYS.diaryWorkoutFlag] = true;
+    }
+  );
+}
+
+export async function createOrOpenWorkoutSessionFile(
+  app: App,
+  settings: WorkoutPluginSettings,
+  dateISO: string,
+  program: DayProgramSpec
+): Promise<TFile> {
+  const folder = normalizePath(settings.workoutsFolder || "Знания").replace(
+    /\/+$/,
+    ""
+  );
+  await ensureFolder(app, folder);
+  const targetPath = normalizePath(`${folder}/Тренировка ${dateISO}.md`);
+  const existing = app.vault.getAbstractFileByPath(targetPath);
+  if (existing instanceof TFile) {
+    await syncWorkoutHabitToDiary(app, settings, dateISO);
+    return existing;
+  }
+
+  const timeNow = currentTimeHHMM();
+  const lines = [
+    "---",
+    `${WORKOUT_KEYS.type}: ${WORKOUT_TYPE_VALUE}`,
+    `${WORKOUT_KEYS.date}: "${dateISO}"`,
+    `${WORKOUT_KEYS.start}: "${timeNow}"`,
+    `${WORKOUT_KEYS.title}: ${JSON.stringify(program.title)}`,
+    `${WORKOUT_KEYS.programDay}: ${program.dayNumber}`,
+    `${WORKOUT_KEYS.durationMin}:`,
+    "---",
+    "",
+    "## Подходы",
+    "",
+  ];
+  const created = await app.vault.create(targetPath, lines.join("\n"));
+  await syncWorkoutHabitToDiary(app, settings, dateISO);
+  return created;
+}
+
+export async function appendSetToWorkoutFile(
+  app: App,
+  settings: WorkoutPluginSettings,
+  session: HydratedWorkoutSession,
+  exerciseName: string,
+  repsOrSec: number,
+  weightKg: number,
+  variant = "Основной"
+): Promise<void> {
+  const meta = getExerciseMeta(exerciseName);
+  const curContent = await app.vault.read(session.file);
+  const prefix =
+    curContent.length > 0 && !curContent.endsWith("\n") ? "\n" : "";
+  const line = `${prefix}- (упражнение:: ${exerciseName}) (${meta.field}:: ${repsOrSec}) (доп_вес_кг:: ${weightKg}) (вариант:: ${variant})\n`;
+  await app.vault.append(session.file, line);
+  await syncWorkoutHabitToDiary(app, settings, session.dateISO || todayLocalISO());
+}
+
+export async function deleteSetFromWorkoutFile(
+  app: App,
+  file: TFile,
+  lineIndex: number
+): Promise<void> {
+  const raw = await app.vault.read(file);
+  const lines = raw.split(/\r?\n/);
+  if (lineIndex < 0 || lineIndex >= lines.length) return;
+  if (!SET_LINE_REGEX.test(lines[lineIndex] ?? "")) return;
+  lines.splice(lineIndex, 1);
+  await app.vault.modify(file, lines.join("\n"));
+}
+
+export function computeSessionDurationMinutes(
+  startStr: string,
+  fallbackMin: number | null
+): number {
+  if (/^\d{2}:\d{2}$/.test(startStr)) {
+    const hh = Number(startStr.slice(0, 2));
+    const mm = Number(startStr.slice(3, 5));
+    if (Number.isInteger(hh) && Number.isInteger(mm)) {
+      const now = new Date();
+      const nowTotal = now.getHours() * 60 + now.getMinutes();
+      const startTotal = hh * 60 + mm;
+      let diff = nowTotal - startTotal;
+      if (diff < 0) diff += 1440;
+      if (diff > 0 && diff <= 600) return diff;
+    }
+  }
+  return fallbackMin && fallbackMin > 0 ? fallbackMin : 60;
+}
+
+=== FILE: ./src/types.ts ===
+import type { TFile } from "obsidian";
+
+export const WORKOUT_KEYS = {
+  type: "тип",
+  date: "дата",
+  start: "начало",
+  title: "название_тренировки",
+  programDay: "день_программы",
+  durationMin: "длительность_мин",
+  diaryWorkoutFlag: "тренировка",
+} as const;
+
+export const WORKOUT_TYPE_VALUE = "Тренировка";
+export const MANUAL_HABITS_PREFIX = "dh_today_manual_habits_v1:";
+
+export const DAYS_SHORT: readonly string[] = [
+  "Пн",
+  "Вт",
+  "Ср",
+  "Чт",
+  "Пт",
+  "Сб",
+  "Вс",
+];
+
+export const REST_PRESETS: readonly number[] = [60, 90, 120, 150, 180, 210];
+
+export type ExerciseFieldKind = "повторы" | "секунды";
+
+export interface ExerciseCatalogItem {
+  name: string;
+  unit: "повт." | "с";
+  field: ExerciseFieldKind;
+}
+
+export interface ProgramExerciseSpec {
+  name: string;
+  series?: number;
+  sets: number;
+  weight: number;
+  target: string;
+  rest: number;
+}
+
+export interface DayProgramSpec {
+  dayNumber: number;
+  title: string;
+  restBetweenSets: number;
+  isRestDay?: boolean;
+  isVolumePullups?: boolean;
+  targetVolume?: number;
+  exercises: ProgramExerciseSpec[];
+  note: string;
+}
+
+export const EXERCISES_CATALOG: readonly ExerciseCatalogItem[] = [
+  { name: "Выходы силой", unit: "повт.", field: "повторы" },
+  { name: "Подтягивания", unit: "повт.", field: "повторы" },
+  { name: "Высокие подтягивания", unit: "повт.", field: "повторы" },
+  { name: "Брусья", unit: "повт.", field: "повторы" },
+  { name: "Жим на кольцах", unit: "повт.", field: "повторы" },
+  { name: "Подтягивания на кольцах", unit: "повт.", field: "повторы" },
+  { name: "Подводящие к выходу на кольцах", unit: "повт.", field: "повторы" },
+  { name: "Отжимания на кольцах", unit: "повт.", field: "повторы" },
+  { name: "Отжимания от пола", unit: "повт.", field: "повторы" },
+  { name: "Приседания", unit: "повт.", field: "повторы" },
+  { name: "Выпады", unit: "повт.", field: "повторы" },
+  { name: "Подъёмы на носки", unit: "повт.", field: "повторы" },
+  { name: "Вис на турнике", unit: "с", field: "секунды" },
+  { name: "Передний вис", unit: "с", field: "секунды" },
+  { name: "Уголок на турнике", unit: "с", field: "секунды" },
+  { name: "Уголок на паралетсах", unit: "с", field: "секунды" },
+];
+
+export const DEFAULT_SCHEDULE: Readonly<Record<number, DayProgramSpec>> = {
+  1: {
+    dayNumber: 1,
+    title: "Понедельник · Выходы силой",
+    restBetweenSets: 150,
+    exercises: [
+      { name: "Выходы силой", series: 1, sets: 4, weight: 8, target: "MAX", rest: 150 },
+      { name: "Выходы силой", series: 2, sets: 4, weight: 4, target: "MAX", rest: 150 },
+      { name: "Выходы силой", series: 3, sets: 4, weight: 0, target: "MAX", rest: 150 },
+    ],
+    note: "Разные хваты. Отдых между подходами: 2–3 мин, между сериями: 15–20 мин.",
+  },
+  2: {
+    dayNumber: 2,
+    title: "Вторник · Подтягивания с весом",
+    restBetweenSets: 210,
+    exercises: [
+      { name: "Подтягивания", series: 1, sets: 3, weight: 16, target: "3–5", rest: 210 },
+      { name: "Подтягивания", series: 2, sets: 3, weight: 16, target: "3–5", rest: 210 },
+      { name: "Подтягивания", series: 3, sets: 3, weight: 16, target: "3–5", rest: 210 },
+    ],
+    note: "3 серии по 3 подхода. Отдых между подходами: 3–4 мин, между сериями: 10–15 мин.",
+  },
+  3: {
+    dayNumber: 3,
+    title: "Среда · Ноги",
+    restBetweenSets: 120,
+    exercises: [
+      { name: "Приседания", sets: 4, weight: 16, target: "12–15", rest: 150 },
+      { name: "Выпады", sets: 4, weight: 36, target: "10–12", rest: 120 },
+      { name: "Подъёмы на носки", sets: 5, weight: 0, target: "15–20", rest: 75 },
+    ],
+    note: "Приседания с жилетом 16 кг, выпады с весом 36 кг. Заверши растяжкой.",
+  },
+  4: {
+    dayNumber: 4,
+    title: "Четверг · Объёмные подтягивания",
+    restBetweenSets: 60,
+    isVolumePullups: true,
+    targetVolume: 100,
+    exercises: [
+      { name: "Подтягивания", series: 1, sets: 6, weight: 0, target: "6–10", rest: 60 },
+      { name: "Подтягивания", series: 2, sets: 6, weight: 0, target: "6–10", rest: 60 },
+      { name: "Подтягивания", series: 3, sets: 6, weight: 0, target: "6–10", rest: 60 },
+    ],
+    note: "3 серии по 5–6 подходов без веса. Суммарно не меньше 100 повторений. Растяжка между сериями.",
+  },
+  5: {
+    dayNumber: 5,
+    title: "Пятница · Брусья",
+    restBetweenSets: 210,
+    exercises: [
+      { name: "Брусья", sets: 4, weight: 16, target: "MAX", rest: 210 },
+      { name: "Брусья", sets: 2, weight: 0, target: "MAX", rest: 210 },
+    ],
+    note: "4 подхода с весом на максимум + 2 подхода без веса на максимум. Отдых 3–4 мин.",
+  },
+  6: {
+    dayNumber: 6,
+    title: "Суббота · Кольца",
+    restBetweenSets: 150,
+    exercises: [
+      { name: "Жим на кольцах", sets: 4, weight: 0, target: "MAX", rest: 150 },
+      { name: "Подтягивания на кольцах", sets: 4, weight: 0, target: "MAX", rest: 150 },
+      { name: "Подводящие к выходу на кольцах", sets: 3, weight: 0, target: "MAX", rest: 150 },
+      { name: "Отжимания на кольцах", sets: 4, weight: 0, target: "MAX", rest: 150 },
+    ],
+    note: "Жим, подтягивания, подводящие, отжимания. Отдых 2–3 мин.",
+  },
+  7: {
+    dayNumber: 7,
+    title: "Воскресенье · Восстановление",
+    restBetweenSets: 120,
+    isRestDay: true,
+    exercises: [],
+    note: "Полное восстановление. Без тренировки.",
+  },
+};
+
+export interface LoggedWorkoutSet {
+  lineIndex: number;
+  name: string;
+  field: ExerciseFieldKind;
+  reps: number;
+  weight: number;
+  variant: string;
+}
+
+export interface WorkoutSessionSummary {
+  file: TFile;
+  path: string;
+  dateISO: string;
+  programDay: number;
+  durationMin: number | null;
+  startStr: string;
+  title: string;
+}
+
+export interface HydratedWorkoutSession extends WorkoutSessionSummary {
+  loggedSets: LoggedWorkoutSet[];
+}
+
+export interface ActiveRestTimerState {
+  sessionPath: string;
+  startAt: number;
+  endAt: number;
+  durationSec: number;
+  notifiedEndAt: number;
+}
+
+export interface SessionDraftState {
+  selectedExKey: string;
+  customWeight: number;
+  draftReps: number;
+  restDurationSec: number;
+}
+
+export interface WorkoutPluginSettings {
+  workoutsFolder: string;
+  diaryFolder: string;
+  soundEnabled: boolean;
+  pinnedSessionPath: string;
+  selectedDay: number;
+  viewMode: "session" | "preview";
+  timer: ActiveRestTimerState;
+  draftBySession: Record<string, SessionDraftState>;
+}
+
+export const DEFAULT_SETTINGS: WorkoutPluginSettings = {
+  workoutsFolder: "Знания",
+  diaryFolder: "Ежедневник",
+  soundEnabled: true,
+  pinnedSessionPath: "",
+  selectedDay: 0,
+  viewMode: "session",
+  timer: {
+    sessionPath: "",
+    startAt: 0,
+    endAt: 0,
+    durationSec: 120,
+    notifiedEndAt: 0,
+  },
+  draftBySession: {},
+};
+
+=== FILE: ./package.json ===
+{
+	"name": "my-workout-companion",
+	"version": "0.1.0",
+	"description": "Рабочий терминал тренировки и таймер отдыха для системы Здоровье",
+	"main": "main.js",
+	"scripts": {
+		"dev": "node esbuild.config.mjs",
+		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+		"bump": "node version-bump.mjs"
+	},
+	"keywords": [],
+	"author": "Mersinho",
+	"license": "MIT",
+	"devDependencies": {
+		"@types/node": "^16.11.6",
+		"builtin-modules": "3.3.0",
+		"esbuild": "0.17.3",
+		"obsidian": "latest",
+		"tslib": "2.4.0",
+		"typescript": "4.7.4"
+	}
+}
+
+=== FILE: ./version-bump.mjs ===
+import { readFileSync, writeFileSync, existsSync } from "fs";
+
+const targetVersion = process.argv[2] || process.env.npm_package_version;
+if (!targetVersion || !/^\d+\.\d+\.\d+$/.test(targetVersion)) {
+  console.error("Использование: npm run bump <версия>");
+  process.exit(1);
+}
+
+const manifest = JSON.parse(readFileSync("manifest.json", "utf8"));
+const { minAppVersion } = manifest;
+manifest.version = targetVersion;
+writeFileSync("manifest.json", JSON.stringify(manifest, null, "\t") + "\n");
+
+const pkg = JSON.parse(readFileSync("package.json", "utf8"));
+pkg.version = targetVersion;
+writeFileSync("package.json", JSON.stringify(pkg, null, "\t") + "\n");
+
+let versions = {};
+if (existsSync("versions.json")) {
+  try { versions = JSON.parse(readFileSync("versions.json", "utf8")); } catch { versions = {}; }
+}
+versions[targetVersion] = minAppVersion;
+writeFileSync("versions.json", JSON.stringify(versions, null, "\t") + "\n");
+console.log(`Версия успешно обновлена до ${targetVersion}`);
+
