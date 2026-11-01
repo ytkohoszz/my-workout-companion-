@@ -15,67 +15,11 @@ export class CatalogAndTemplatesEditor {
   render(): void {
     this.hostEl.empty();
 
-    // 1. Шаблоны тренировок
-    this.hostEl.createEl("h3", { text: "Быстрые шаблоны тренировок" });
-    const tplCard = this.hostEl.createDiv("my-wc-set-card");
-    tplCard.createDiv({
-      cls: "my-wc-set-subtitle",
-      text: "Шаблоны — это необязательные заготовки для быстрого заполнения состава тренировки. Создавать новые шаблоны удобнее всего прямо в окне тренировки кнопкой «Сохранить как шаблон».",
-    });
-
-    const templates = this.plugin.programStore.getTemplates();
-    if (templates.length === 0) {
-      tplCard.createDiv({
-        cls: "my-wc-sets-empty",
-        text: "Сохранённых шаблонов пока нет.",
-      });
-    } else {
-      const tplList = tplCard.createDiv("my-wc-set-ex-list");
-      for (const tpl of templates) {
-        const row = tplList.createDiv("my-wc-set-ex-row");
-        const info = row.createDiv("my-wc-set-cat-name");
-        info.createEl("strong", { text: tpl.name });
-        const summary = tpl.exercises
-          .map(
-            (e) =>
-              `${e.name} (${e.sets}×${e.target}${e.weight > 0 ? `, +${e.weight}кг` : ""})`
-          )
-          .join(" · ");
-        info.createDiv({
-          cls: "my-wc-subtitle",
-          text: summary,
-        });
-
-        const delBtn = row.createEl("button", {
-          cls: "my-wc-btn",
-          text: "✕ Удалить",
-          attr: { type: "button" },
-        });
-        delBtn.onclick = () => {
-          this.plugin.programStore.deleteTemplate(tpl.id);
-          this.render();
-        };
-      }
-    }
-
-    const tplActions = tplCard.createDiv("my-wc-set-actions");
-    const resetTplsBtn = tplActions.createEl("button", {
-      cls: "my-wc-btn",
-      text: "↺ Восстановить базовые шаблоны",
-      attr: { type: "button" },
-    });
-    resetTplsBtn.onclick = () => {
-      this.plugin.programStore.resetTemplatesToDefaults();
-      new Notice("Базовые шаблоны восстановлены.");
-      this.render();
-    };
-
-    // 2. Каталог упражнений
     this.hostEl.createEl("h3", { text: "Каталог упражнений (program.json)" });
     const catCard = this.hostEl.createDiv("my-wc-set-card");
     catCard.createDiv({
       cls: "my-wc-set-subtitle",
-      text: "Названия существующих упражнений защищены от переименования, чтобы не нарушать историю рекордов в прошлых заметках тренировок. Ты можешь в любой момент добавить своё упражнение.",
+      text: "Отмеченные галочкой упражнения показываются как быстрые кнопки добавления прямо в окне тренировки. Все остальные также доступны в выпадающем списке.",
     });
 
     const addRow = catCard.createDiv("my-wc-set-ex-row");
@@ -107,17 +51,13 @@ export class CatalogAndTemplatesEditor {
 
     const addBtn = addRow.createEl("button", {
       cls: "mod-cta my-wc-btn",
-      text: "＋ Добавить в каталог",
+      text: "＋ Добавить упражнение",
       attr: { type: "button" },
     });
     addBtn.onclick = () => {
       const clean = this.newExName.trim();
       if (!clean) {
         new Notice("Введи название упражнения.");
-        return;
-      }
-      if (this.plugin.programStore.findExercise(clean)) {
-        new Notice("Такое упражнение уже есть в каталоге.");
         return;
       }
       this.plugin.programStore.addCustomExercise(clean, this.newExField);
@@ -129,6 +69,18 @@ export class CatalogAndTemplatesEditor {
     const catList = catCard.createDiv("my-wc-set-ex-list");
     for (const item of this.plugin.programStore.getCatalog()) {
       const row = catList.createDiv("my-wc-set-ex-row");
+
+      const quickChk = row.createEl("input", {
+        attr: {
+          type: "checkbox",
+          title: "Показывать как быструю кнопку в конструкторе тренировки",
+        },
+      });
+      quickChk.checked = Boolean(item.isQuickBase || item.isCustom);
+      quickChk.onchange = () => {
+        this.plugin.programStore.toggleQuickButton(item.name, quickChk.checked);
+      };
+
       row.createSpan({
         cls: "my-wc-set-cat-name",
         text: `${item.name} · ${item.field} (${item.unit})${item.isCustom ? " · своё" : ""}`,
@@ -137,12 +89,24 @@ export class CatalogAndTemplatesEditor {
       const delBtn = row.createEl("button", {
         cls: "my-wc-btn",
         text: "✕",
-        attr: { type: "button", title: "Убрать из списка выбора" },
+        attr: { type: "button", title: "Убрать из каталога" },
       });
       delBtn.onclick = () => {
         this.plugin.programStore.removeExerciseFromCatalog(item.name);
         this.render();
       };
     }
+
+    const actions = catCard.createDiv("my-wc-set-actions");
+    const resetBtn = actions.createEl("button", {
+      cls: "my-wc-btn",
+      text: "↺ Восстановить базовый каталог",
+      attr: { type: "button" },
+    });
+    resetBtn.onclick = () => {
+      this.plugin.programStore.resetCatalogToDefaults();
+      new Notice("Базовый каталог упражнений восстановлен.");
+      this.render();
+    };
   }
 }

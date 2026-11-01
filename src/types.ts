@@ -41,6 +41,11 @@ export interface ExerciseCatalogItem {
   name: string;
   unit: "повт." | "с";
   field: ExerciseFieldKind;
+  defaultWeight?: number;
+  defaultSets?: number;
+  defaultTarget?: string;
+  defaultRest?: number;
+  isQuickBase?: boolean;
   isCustom?: boolean;
 }
 
@@ -53,113 +58,100 @@ export interface PlannedExerciseItem {
   rest: number;
 }
 
-export interface WorkoutTemplate {
-  id: string;
-  name: string;
-  note?: string;
-  exercises: PlannedExerciseItem[];
-}
-
 export interface ProgramStoreData {
   version: number;
   catalog: ExerciseCatalogItem[];
-  templates: WorkoutTemplate[];
 }
 
+/**
+ * Базовый каталог упражнений. Первые 6 с `isQuickBase: true` выводятся как быстрые кнопки
+ * добавления в список сегодняшней тренировки, остальные также доступны в каталоге и для совместимости с health.js.
+ */
 export const EXERCISES_CATALOG: readonly ExerciseCatalogItem[] = [
-  { name: "Выходы силой", unit: "повт.", field: "повторы" },
-  { name: "Подтягивания", unit: "повт.", field: "повторы" },
-  { name: "Высокие подтягивания", unit: "повт.", field: "повторы" },
-  { name: "Брусья", unit: "повт.", field: "повторы" },
-  { name: "Жим на брусьях", unit: "повт.", field: "повторы" },
-  { name: "Жим на кольцах", unit: "повт.", field: "повторы" },
-  { name: "Подтягивания на кольцах", unit: "повт.", field: "повторы" },
-  { name: "Подводящие к выходу на кольцах", unit: "повт.", field: "повторы" },
-  { name: "Отжимания на кольцах", unit: "повт.", field: "повторы" },
-  { name: "Отжимания от пола", unit: "повт.", field: "повторы" },
-  { name: "Приседания", unit: "повт.", field: "повторы" },
-  { name: "Выпады", unit: "повт.", field: "повторы" },
-  { name: "Подъёмы на носки", unit: "повт.", field: "повторы" },
-  { name: "Вис на турнике", unit: "с", field: "секунды" },
-  { name: "Передний вис", unit: "с", field: "секунды" },
-  { name: "Уголок на турнике", unit: "с", field: "секунды" },
-  { name: "Уголок на паралетсах", unit: "с", field: "секунды" },
+  {
+    name: "Выходы силой",
+    unit: "повт.",
+    field: "повторы",
+    defaultWeight: 0,
+    defaultSets: 4,
+    defaultTarget: "MAX",
+    defaultRest: 150,
+    isQuickBase: true,
+  },
+  {
+    name: "Подтягивания",
+    unit: "повт.",
+    field: "повторы",
+    defaultWeight: 16,
+    defaultSets: 4,
+    defaultTarget: "MAX",
+    defaultRest: 180,
+    isQuickBase: true,
+  },
+  {
+    name: "Брусья",
+    unit: "повт.",
+    field: "повторы",
+    defaultWeight: 16,
+    defaultSets: 4,
+    defaultTarget: "MAX",
+    defaultRest: 180,
+    isQuickBase: true,
+  },
+  {
+    name: "Брусья на кольцах",
+    unit: "повт.",
+    field: "повторы",
+    defaultWeight: 0,
+    defaultSets: 4,
+    defaultTarget: "MAX",
+    defaultRest: 150,
+    isQuickBase: true,
+  },
+  {
+    name: "Приседания",
+    unit: "повт.",
+    field: "повторы",
+    defaultWeight: 16,
+    defaultSets: 4,
+    defaultTarget: "12–15",
+    defaultRest: 150,
+    isQuickBase: true,
+  },
+  {
+    name: "Выпады",
+    unit: "повт.",
+    field: "повторы",
+    defaultWeight: 36,
+    defaultSets: 4,
+    defaultTarget: "10–12",
+    defaultRest: 120,
+    isQuickBase: true,
+  },
+  { name: "Высокие подтягивания", unit: "повт.", field: "повторы", defaultRest: 150 },
+  { name: "Жим на кольцах", unit: "повт.", field: "повторы", defaultRest: 150 },
+  { name: "Подтягивания на кольцах", unit: "повт.", field: "повторы", defaultRest: 150 },
+  { name: "Подводящие к выходу на кольцах", unit: "повт.", field: "повторы", defaultRest: 150 },
+  { name: "Отжимания на кольцах", unit: "повт.", field: "повторы", defaultRest: 150 },
+  { name: "Отжимания от пола", unit: "повт.", field: "повторы", defaultRest: 120 },
+  { name: "Подъёмы на носки", unit: "повт.", field: "повторы", defaultTarget: "15–20", defaultRest: 75 },
+  { name: "Вис на турнике", unit: "с", field: "секунды", defaultRest: 120 },
+  { name: "Передний вис", unit: "с", field: "секунды", defaultRest: 120 },
+  { name: "Уголок на турнике", unit: "с", field: "секунды", defaultRest: 120 },
+  { name: "Уголок на паралетсах", unit: "с", field: "секунды", defaultRest: 120 },
 ];
 
 export function makePlanItemId(): string {
-  return "ex_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 7);
+  return (
+    "ex_" +
+    Date.now().toString(36) +
+    "_" +
+    Math.random().toString(36).slice(2, 7)
+  );
 }
-
-export const DEFAULT_TEMPLATES: readonly WorkoutTemplate[] = [
-  {
-    id: "tpl_muscle_ups",
-    name: "Выходы силой (лесенка веса)",
-    note: "Разные хваты. Отдых между подходами: 2–3 мин, между сериями: 15–20 мин.",
-    exercises: [
-      { id: "mu_1", name: "Выходы силой", weight: 8, sets: 4, target: "MAX", rest: 150 },
-      { id: "mu_2", name: "Выходы силой", weight: 4, sets: 4, target: "MAX", rest: 150 },
-      { id: "mu_3", name: "Выходы силой", weight: 0, sets: 4, target: "MAX", rest: 150 },
-    ],
-  },
-  {
-    id: "tpl_weighted_pullups",
-    name: "Тяжёлые подтягивания с весом",
-    note: "3 серии по 3 подхода. Отдых между подходами: 3–4 мин.",
-    exercises: [
-      { id: "wp_1", name: "Подтягивания", weight: 16, sets: 9, target: "3–5", rest: 210 },
-    ],
-  },
-  {
-    id: "tpl_legs",
-    name: "Ноги (приседания и выпады)",
-    note: "Приседания с жилетом 16 кг, выпады с весом 36 кг. Заверши растяжкой.",
-    exercises: [
-      { id: "lg_1", name: "Приседания", weight: 16, sets: 4, target: "12–15", rest: 150 },
-      { id: "lg_2", name: "Выпады", weight: 36, sets: 4, target: "10–12", rest: 120 },
-      { id: "lg_3", name: "Подъёмы на носки", weight: 0, sets: 5, target: "15–20", rest: 75 },
-    ],
-  },
-  {
-    id: "tpl_volume_pullups",
-    name: "Объёмные подтягивания (база)",
-    note: "3 серии по 6 подходов без веса. Суммарно от 100 повторений.",
-    exercises: [
-      { id: "vp_1", name: "Подтягивания", weight: 0, sets: 18, target: "6–10", rest: 60 },
-    ],
-  },
-  {
-    id: "tpl_dips",
-    name: "Брусья (вес + база)",
-    note: "4 подхода с весом на максимум + 2 подхода без веса на максимум.",
-    exercises: [
-      { id: "dp_1", name: "Брусья", weight: 16, sets: 4, target: "MAX", rest: 210 },
-      { id: "dp_2", name: "Брусья", weight: 0, sets: 2, target: "MAX", rest: 210 },
-    ],
-  },
-  {
-    id: "tpl_rings",
-    name: "Гимнастические кольца",
-    note: "Жим, подтягивания, подводящие, отжимания. Отдых 2–3 мин.",
-    exercises: [
-      { id: "rg_1", name: "Жим на кольцах", weight: 0, sets: 4, target: "MAX", rest: 150 },
-      { id: "rg_2", name: "Подтягивания на кольцах", weight: 0, sets: 4, target: "MAX", rest: 150 },
-      { id: "rg_3", name: "Подводящие к выходу на кольцах", weight: 0, sets: 3, target: "MAX", rest: 150 },
-      { id: "rg_4", name: "Отжимания на кольцах", weight: 0, sets: 4, target: "MAX", rest: 150 },
-    ],
-  },
-];
 
 export function cloneDefaultCatalog(): ExerciseCatalogItem[] {
   return EXERCISES_CATALOG.map((e) => ({ ...e }));
-}
-
-export function cloneDefaultTemplates(): WorkoutTemplate[] {
-  return DEFAULT_TEMPLATES.map((t) => ({
-    id: t.id,
-    name: t.name,
-    note: t.note,
-    exercises: t.exercises.map((e) => ({ ...e })),
-  }));
 }
 
 export interface LoggedWorkoutSet {
@@ -213,15 +205,12 @@ export interface SessionDraftState {
   draftReps: number;
   restDurationSec: number;
   plannedExercises: PlannedExerciseItem[];
-  customTitle?: string;
 }
 
 export interface WorkoutPluginSettings {
   workoutsFolder: string;
   diaryFolder: string;
   soundEnabled: boolean;
-  pinnedSessionPath: string;
-  selectedDateISO: string;
   timer: ActiveRestTimerState;
   draftBySession: Record<string, SessionDraftState>;
 }
@@ -230,8 +219,6 @@ export const DEFAULT_SETTINGS: WorkoutPluginSettings = {
   workoutsFolder: "Знания",
   diaryFolder: "Ежедневник",
   soundEnabled: true,
-  pinnedSessionPath: "",
-  selectedDateISO: "",
   timer: {
     sessionPath: "",
     startAt: 0,

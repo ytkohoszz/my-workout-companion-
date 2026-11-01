@@ -46,13 +46,6 @@ export function todayLocalISO(): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
-export function yesterdayLocalISO(): string {
-  const d = new Date();
-  d.setDate(d.getDate() - 1);
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
-}
-
 export function currentTimeHHMM(): string {
   const d = new Date();
   const p = (n: number) => String(n).padStart(2, "0");
@@ -81,8 +74,12 @@ export function formatShortDateRu(iso: string): string {
 
 export function formatDateWithWeekdayRu(iso: string): string {
   const wNum = isoWeekdayOf(iso);
-  const wShort = DAYS_SHORT[wNum - 1] ?? "";
-  return `${wShort}, ${formatShortDateRu(iso)}`;
+  const wFull = DAYS_FULL[wNum - 1] ?? "Сегодня";
+  const parts = iso.split("-");
+  if (parts.length === 3) {
+    return `${wFull}, ${parts[2]}.${parts[1]}.${parts[0]}`;
+  }
+  return wFull;
 }
 
 export function formatDefaultSessionTitle(
@@ -120,11 +117,9 @@ function extractISODate(v: unknown): string {
   return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : "";
 }
 
-/**
- * Свойство `день_программы` теперь необязательно:
- * возвращаем число 1..7, только если оно явно записано в старой заметке, иначе null.
- */
-export function readOptionalProgramDay(fm: Record<string, unknown>): number | null {
+export function readOptionalProgramDay(
+  fm: Record<string, unknown>
+): number | null {
   const explicit = readNum(fm[WORKOUT_KEYS.programDay]);
   if (explicit && explicit >= 1 && explicit <= 7) {
     return Math.round(explicit);
@@ -223,11 +218,6 @@ export async function hydrateWorkoutSession(
   };
 }
 
-/**
- * Превращает выполненные в сессии подходы в состав тренировки (PlannedExerciseItem[]),
- * объединяя подходы одного упражнения с одинаковым весом.
- * Используется для восстановления состава открытой сессии и для кнопки «Повторить прошлую».
- */
 export function buildPlanFromLoggedSets(
   sets: LoggedWorkoutSet[],
   defaultRestSec = 120
@@ -246,7 +236,7 @@ export function buildPlanFromLoggedSets(
         name: s.name,
         weight: s.weight,
         sets: 1,
-        target: String(s.reps),
+        target: "MAX",
         rest: defaultRestSec,
       };
       map.set(key, item);
@@ -254,29 +244,6 @@ export function buildPlanFromLoggedSets(
     }
   }
   return order;
-}
-
-export async function buildPlanFromPreviousSession(
-  app: App,
-  allSessions: WorkoutSessionSummary[],
-  excludeSessionPath?: string
-): Promise<{ sourceDateISO: string; items: PlannedExerciseItem[] } | null> {
-  for (const sess of allSessions) {
-    if (excludeSessionPath && sess.path === excludeSessionPath) continue;
-    let content = "";
-    try {
-      content = await app.vault.cachedRead(sess.file);
-    } catch {
-      continue;
-    }
-    const sets = parseSetsFromContent(content);
-    if (sets.length === 0) continue;
-    return {
-      sourceDateISO: sess.dateISO,
-      items: buildPlanFromLoggedSets(sets, 120),
-    };
-  }
-  return null;
 }
 
 export interface PreviousExerciseReference {
@@ -288,10 +255,6 @@ export interface PreviousExerciseReference {
   allTimeBestForExactWeight: number;
 }
 
-/**
- * Ищет прошлый результат по упражнению и одновременно считает абсолютный рекорд
- * для связки (упражнение + точный доп. вес), согласованно с логикой health.js.
- */
 export async function findPreviousExerciseResult(
   app: App,
   allSessions: WorkoutSessionSummary[],
@@ -301,7 +264,8 @@ export async function findPreviousExerciseResult(
 ): Promise<PreviousExerciseReference | null> {
   const candidates = allSessions.filter((s) => s.path !== currentSessionPath);
 
-  let latestExact: { dateISO: string; sets: number[]; best: number } | null = null;
+  let latestExact: { dateISO: string; sets: number[]; best: number } | null =
+    null;
   let fallbackOtherWeight: {
     dateISO: string;
     sets: number[];
@@ -373,11 +337,6 @@ export async function findPreviousExerciseResult(
   return null;
 }
 
-/**
- * Полный расчёт рекордов по всем упражнениям (включая пользовательские),
- * совместимый с таблицей «Рекорды упражнений» в health.js:
- * ключ группировки — [name, variant, weight].
- */
 export async function computeAllExerciseRecords(
   app: App,
   allSessions: WorkoutSessionSummary[],
@@ -400,7 +359,6 @@ export async function computeAllExerciseRecords(
     }
   >();
 
-  // allSessions уже отсортированы от новых к старым
   for (const sess of allSessions) {
     let content = "";
     try {
@@ -555,9 +513,6 @@ export async function syncWorkoutHabitToDiary(
   );
 }
 
-/**
- * Создаёт или открывает файл тренировки за выбранную дату (без обязательной привязки к день_программы).
- */
 export async function createOrOpenWorkoutSessionFile(
   app: App,
   settings: WorkoutPluginSettings,

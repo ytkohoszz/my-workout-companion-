@@ -41,7 +41,7 @@ function sanitizeDraftPlanList(raw: unknown): PlannedExerciseItem[] {
       rest:
         typeof e.rest === "number" && Number.isFinite(e.rest) && e.rest >= 5
           ? Math.round(e.rest)
-          : 120,
+          : 150,
     });
   }
   return out;
@@ -95,10 +95,8 @@ function migrateSettings(raw: unknown): WorkoutPluginSettings {
           restDurationSec:
             typeof d.restDurationSec === "number" && d.restDurationSec > 0
               ? d.restDurationSec
-              : 120,
+              : 150,
           plannedExercises: sanitizeDraftPlanList(d.plannedExercises),
-          customTitle:
-            typeof d.customTitle === "string" ? d.customTitle : undefined,
         };
       }
     }
@@ -117,10 +115,6 @@ function migrateSettings(raw: unknown): WorkoutPluginSettings {
       typeof s.soundEnabled === "boolean"
         ? s.soundEnabled
         : DEFAULT_SETTINGS.soundEnabled,
-    pinnedSessionPath:
-      typeof s.pinnedSessionPath === "string" ? s.pinnedSessionPath : "",
-    selectedDateISO:
-      typeof s.selectedDateISO === "string" ? s.selectedDateISO : "",
     timer,
     draftBySession,
   };
@@ -210,7 +204,6 @@ export default class MyWorkoutCompanionPlugin extends Plugin {
     this.registerObsidianProtocolHandler("my-workout", (params) => {
       this.openWorkout({
         sessionPath: params.session || undefined,
-        dateISO: params.date || undefined,
       });
     });
 

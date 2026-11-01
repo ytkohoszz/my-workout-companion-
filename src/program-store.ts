@@ -1,52 +1,9 @@
 import { App, normalizePath } from "obsidian";
 import {
   ExerciseCatalogItem,
-  PlannedExerciseItem,
   ProgramStoreData,
-  WorkoutTemplate,
   cloneDefaultCatalog,
-  cloneDefaultTemplates,
-  makePlanItemId,
 } from "./types";
-
-interface LegacyProgramExercise {
-  name?: unknown;
-  sets?: unknown;
-  weight?: unknown;
-  target?: unknown;
-  rest?: unknown;
-}
-
-interface LegacyDayProgram {
-  title?: unknown;
-  note?: unknown;
-  isRestDay?: unknown;
-  exercises?: unknown;
-}
-
-function sanitizePlannedExercise(raw: unknown): PlannedExerciseItem | null {
-  if (!raw || typeof raw !== "object") return null;
-  const e = raw as Record<string, unknown>;
-  const name = typeof e.name === "string" ? e.name.trim() : "";
-  if (!name) return null;
-  const weight =
-    typeof e.weight === "number" && Number.isFinite(e.weight) && e.weight >= 0
-      ? Math.round(e.weight * 2) / 2
-      : 0;
-  const sets =
-    typeof e.sets === "number" && Number.isFinite(e.sets) && e.sets >= 1
-      ? Math.round(e.sets)
-      : 4;
-  const target =
-    typeof e.target === "string" && e.target.trim() ? e.target.trim() : "MAX";
-  const rest =
-    typeof e.rest === "number" && Number.isFinite(e.rest) && e.rest >= 5
-      ? Math.round(e.rest)
-      : 120;
-  const id =
-    typeof e.id === "string" && e.id.trim() ? e.id.trim() : makePlanItemId();
-  return { id, name, weight, sets, target, rest };
-}
 
 function sanitizeCatalog(raw: unknown): ExerciseCatalogItem[] {
   const defaults = cloneDefaultCatalog();
@@ -54,6 +11,9 @@ function sanitizeCatalog(raw: unknown): ExerciseCatalogItem[] {
 
   const out: ExerciseCatalogItem[] = [];
   const seen = new Set<string>();
+  const defaultMap = new Map(
+    defaults.map((d) => [d.name.toLowerCase(), d])
+  );
 
   for (const item of raw) {
     if (!item || typeof item !== "object") continue;
@@ -63,16 +23,37 @@ function sanitizeCatalog(raw: unknown): ExerciseCatalogItem[] {
     const low = name.toLowerCase();
     if (seen.has(low)) continue;
     seen.add(low);
+
+    const defMatch = defaultMap.get(low);
     const isSec = c.field === "секунды" || c.unit === "с";
     out.push({
       name,
       field: isSec ? "секунды" : "повторы",
       unit: isSec ? "с" : "повт.",
+      defaultWeight:
+        typeof c.defaultWeight === "number"
+          ? c.defaultWeight
+          : defMatch?.defaultWeight ?? 0,
+      defaultSets:
+        typeof c.defaultSets === "number"
+          ? c.defaultSets
+          : defMatch?.defaultSets ?? 4,
+      defaultTarget:
+        typeof c.defaultTarget === "string" && c.defaultTarget.trim()
+          ? c.defaultTarget.trim()
+          : defMatch?.defaultTarget ?? "MAX",
+      defaultRest:
+        typeof c.defaultRest === "number"
+          ? c.defaultRest
+          : defMatch?.defaultRest ?? 120,
+      isQuickBase:
+        typeof c.isQuickBase === "boolean"
+          ? c.isQuickBase
+          : Boolean(defMatch?.isQuickBase || c.isCustom),
       isCustom: Boolean(c.isCustom),
     });
   }
 
-  // Гарантируем, что базовые упражнения (включая «Жим на брусьях») присутствуют
   for (const def of defaults) {
     if (!seen.has(def.name.toLowerCase())) {
       seen.add(def.name.toLowerCase());
@@ -81,88 +62,6 @@ function sanitizeCatalog(raw: unknown): ExerciseCatalogItem[] {
   }
 
   return out;
-}
-
-function sanitizeTemplates(raw: unknown): WorkoutTemplate[] {
-  if (!Array.isArray(raw)) return cloneDefaultTemplates();
-  const out: WorkoutTemplate[] = [];
-  for (const item of raw) {
-    if (!item || typeof item !== "object") continue;
-    const t = item as Record<string, unknown>;
-    const name = typeof t.name === "string" ? t.name.trim() : "";
-    if (!name) continue;
-    const id =
-      typeof t.id === "string" && t.id.trim()
-        ? t.id.trim()
-        : "tpl_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 6);
-    const note = typeof t.note === "string" ? t.note.trim() : undefined;
-    const exercises = Array.isArray(t.exercises)
-      ? t.exercises
-          .map(sanitizePlannedExercise)
-          .filter((x): x is PlannedExerciseItem => x !== null)
-      : [];
-    if (exercises.length > 0) {
-      out.push({ id, name, note, exercises });
-    }
-  }
-  return out;
-}
-
-/**
- * Конвертирует старое расписание по дням недели (v0.2.0 schedule) в список шаблонов,
- * группируя подряд идущие серии одного упражнения с тем же весом.
- */
-export function convertLegacyScheduleToTemplates(
-  rawSchedule: unknown
-): WorkoutTemplate[] {
-  if (!rawSchedule || typeof rawSchedule !== "object") {
-    return cloneDefaultTemplates();
-  }
-  const map = rawSchedule as Record<string, unknown>;
-  const templates: WorkoutTemplate[] = [];
-
-  for (let d = 1; d <= 7; d++) {
-    const dayObj = (map[String(d)] ?? map[d]) as LegacyDayProgram | undefined;
-    if (!dayObj || typeof dayObj !== "object") continue;
-    if (dayObj.isRestDay === true) continue;
-    const rawExs = Array.isArray(dayObj.exercises)
-      ? (dayObj.exercises as LegacyProgramExercise[])
-      : [];
-    if (rawExs.length === 0) continue;
-
-    const merged: PlannedExerciseItem[] = [];
-    for (const rx of rawExs) {
-      const parsed = sanitizePlannedExercise(rx);
-      if (!parsed) continue;
-      const last = merged[merged.length - 1];
-      if (
-        last &&
-        last.name === parsed.name &&
-        Math.abs(last.weight - parsed.weight) < 0.01 &&
-        last.target === parsed.target
-      ) {
-        last.sets += parsed.sets;
-      } else {
-        merged.push(parsed);
-      }
-    }
-
-    if (merged.length === 0) continue;
-    const rawTitle = typeof dayObj.title === "string" ? dayObj.title.trim() : "";
-    const cleanName = rawTitle.includes("·")
-      ? rawTitle.split("·").slice(1).join("·").trim() || rawTitle
-      : rawTitle || `Шаблон дня ${d}`;
-    const note = typeof dayObj.note === "string" ? dayObj.note.trim() : undefined;
-
-    templates.push({
-      id: `tpl_migrated_day_${d}`,
-      name: cleanName,
-      note,
-      exercises: merged,
-    });
-  }
-
-  return templates.length > 0 ? templates : cloneDefaultTemplates();
 }
 
 export class ProgramStore {
@@ -175,9 +74,8 @@ export class ProgramStore {
     this.app = app;
     this.filePath = normalizePath(`${pluginDir}/program.json`);
     this.data = {
-      version: 2,
+      version: 3,
       catalog: cloneDefaultCatalog(),
-      templates: cloneDefaultTemplates(),
     };
   }
 
@@ -190,16 +88,10 @@ export class ProgramStore {
         const rawText = await adapter.read(this.filePath);
         const parsed = JSON.parse(rawText) as Record<string, unknown>;
         if (parsed && typeof parsed === "object") {
-          const catalog = sanitizeCatalog(parsed.catalog);
-          let templates: WorkoutTemplate[];
-          if (Array.isArray(parsed.templates)) {
-            templates = sanitizeTemplates(parsed.templates);
-          } else if (parsed.schedule) {
-            templates = convertLegacyScheduleToTemplates(parsed.schedule);
-          } else {
-            templates = cloneDefaultTemplates();
-          }
-          this.data = { version: 2, catalog, templates };
+          this.data = {
+            version: 3,
+            catalog: sanitizeCatalog(parsed.catalog),
+          };
           loadedFromDisk = true;
         }
       }
@@ -207,13 +99,16 @@ export class ProgramStore {
       loadedFromDisk = false;
     }
 
-    if (!loadedFromDisk && legacySettingsRaw && typeof legacySettingsRaw === "object") {
+    if (
+      !loadedFromDisk &&
+      legacySettingsRaw &&
+      typeof legacySettingsRaw === "object"
+    ) {
       const leg = legacySettingsRaw as Record<string, unknown>;
-      const catalog = sanitizeCatalog(leg.catalog);
-      const templates = leg.schedule
-        ? convertLegacyScheduleToTemplates(leg.schedule)
-        : cloneDefaultTemplates();
-      this.data = { version: 2, catalog, templates };
+      this.data = {
+        version: 3,
+        catalog: sanitizeCatalog(leg.catalog),
+      };
       await this.saveNow();
     } else if (!loadedFromDisk) {
       await this.saveNow();
@@ -224,8 +119,8 @@ export class ProgramStore {
     return this.data.catalog;
   }
 
-  getTemplates(): readonly WorkoutTemplate[] {
-    return this.data.templates;
+  getQuickExercises(): readonly ExerciseCatalogItem[] {
+    return this.data.catalog.filter((c) => c.isQuickBase || c.isCustom);
   }
 
   findExercise(name: string): ExerciseCatalogItem | undefined {
@@ -240,12 +135,21 @@ export class ProgramStore {
     const clean = name.replace(/\s+/g, " ").trim();
     if (!clean) return null;
     const existing = this.findExercise(clean);
-    if (existing) return existing;
+    if (existing) {
+      existing.isQuickBase = true;
+      this.requestSave();
+      return existing;
+    }
 
     const item: ExerciseCatalogItem = {
       name: clean,
       field,
       unit: field === "секунды" ? "с" : "повт.",
+      defaultWeight: 0,
+      defaultSets: 4,
+      defaultTarget: "MAX",
+      defaultRest: 120,
+      isQuickBase: true,
       isCustom: true,
     };
     this.data.catalog.push(item);
@@ -253,64 +157,27 @@ export class ProgramStore {
     return item;
   }
 
+  toggleQuickButton(name: string, enabled: boolean): void {
+    const item = this.findExercise(name);
+    if (item) {
+      item.isQuickBase = enabled;
+      this.requestSave();
+    }
+  }
+
   removeExerciseFromCatalog(name: string): boolean {
     const low = name.trim().toLowerCase();
-    const idx = this.data.catalog.findIndex((c) => c.name.toLowerCase() === low);
+    const idx = this.data.catalog.findIndex(
+      (c) => c.name.toLowerCase() === low
+    );
     if (idx === -1) return false;
     this.data.catalog.splice(idx, 1);
     this.requestSave();
     return true;
   }
 
-  saveTemplate(
-    name: string,
-    exercises: PlannedExerciseItem[],
-    note?: string
-  ): WorkoutTemplate | null {
-    const cleanName = name.replace(/\s+/g, " ").trim();
-    if (!cleanName || exercises.length === 0) return null;
-
-    const cleanExs = exercises.map((e) => ({
-      id: makePlanItemId(),
-      name: e.name,
-      weight: e.weight,
-      sets: e.sets,
-      target: e.target || "MAX",
-      rest: e.rest || 120,
-    }));
-
-    const existing = this.data.templates.find(
-      (t) => t.name.toLowerCase() === cleanName.toLowerCase()
-    );
-    if (existing) {
-      existing.name = cleanName;
-      existing.note = note?.trim() || existing.note;
-      existing.exercises = cleanExs;
-      this.requestSave();
-      return existing;
-    }
-
-    const created: WorkoutTemplate = {
-      id: "tpl_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 6),
-      name: cleanName,
-      note: note?.trim() || undefined,
-      exercises: cleanExs,
-    };
-    this.data.templates.push(created);
-    this.requestSave();
-    return created;
-  }
-
-  deleteTemplate(templateId: string): void {
-    const idx = this.data.templates.findIndex((t) => t.id === templateId);
-    if (idx !== -1) {
-      this.data.templates.splice(idx, 1);
-      this.requestSave();
-    }
-  }
-
-  resetTemplatesToDefaults(): void {
-    this.data.templates = cloneDefaultTemplates();
+  resetCatalogToDefaults(): void {
+    this.data.catalog = cloneDefaultCatalog();
     this.requestSave();
   }
 
@@ -329,7 +196,7 @@ export class ProgramStore {
         JSON.stringify(this.data, null, 2)
       );
     } catch {
-      // игнорируем ошибки записи адаптера
+      // игнорируем ошибки адаптера
     }
   }
 
