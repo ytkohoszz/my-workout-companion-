@@ -51,12 +51,16 @@ export class WorkoutCompanionModal extends Modal {
   private newExFieldDraft: "повторы" | "секунды" = "повторы";
   private lastRecordSetLineIndex: number | null = null;
 
-  private headerEl!: HTMLElement;
+private headerEl!: HTMLElement;
   private timerCardEl!: HTMLElement;
   private timerTimeEl: HTMLElement | null = null;
   private timerStatusEl: HTMLElement | null = null;
   private timerFillEl: HTMLElement | null = null;
-  private bodyEl!: HTMLElement;
+  private timerControlsEl: HTMLElement | null = null;
+  private lastTimerRunning: boolean | null = null;
+  private loggerHostEl!: HTMLElement;
+  private planHostEl!: HTMLElement;
+  private setsHostEl!: HTMLElement;
 
   constructor(
     app: App,
@@ -83,15 +87,21 @@ export class WorkoutCompanionModal extends Modal {
     this.contentEl.focus({ preventScroll: true });
   }
 
-  onOpen(): void {
+onOpen(): void {
     this.closed = false;
     this.modalEl.addClass("my-wc-modal-container");
     this.contentEl.addClass("my-wc-modal");
     this.contentEl.setAttribute("tabindex", "-1");
 
     this.headerEl = this.contentEl.createDiv("my-wc-header");
-    this.timerCardEl = this.contentEl.createDiv("my-wc-timer-card");
-    this.bodyEl = this.contentEl.createDiv("my-wc-body");
+    const workspace = this.contentEl.createDiv("my-wc-workspace");
+    const leftCol = workspace.createDiv("my-wc-col-main");
+    const rightCol = workspace.createDiv("my-wc-col-side");
+
+    this.timerCardEl = leftCol.createDiv("my-wc-timer-card");
+    this.loggerHostEl = leftCol.createDiv("my-wc-logger-host");
+    this.planHostEl = rightCol.createDiv("my-wc-plan-host");
+    this.setsHostEl = rightCol.createDiv("my-wc-sets-host");
 
     const unsubTimer = this.plugin.timer.subscribe((state, now) => {
       this.updateTimerDisplayDOM(state, now);
@@ -116,6 +126,8 @@ export class WorkoutCompanionModal extends Modal {
     this.timerTimeEl = null;
     this.timerStatusEl = null;
     this.timerFillEl = null;
+    this.timerControlsEl = null;
+    this.lastTimerRunning = null;
     this.contentEl.empty();
   }
 
@@ -240,79 +252,142 @@ export class WorkoutCompanionModal extends Modal {
     this.renderBody(todayISO, draft);
   }
 
-  private renderHeader(todayISO: string, draft: SessionDraftState): void {
+private renderHeader(todayISO: string, draft: SessionDraftState): void {
     this.headerEl.empty();
 
+    const left = this.headerEl.createDiv("my-wc-header-left");
     const displayTitle =
       this.activeSession?.title ||
       formatDefaultSessionTitle(todayISO, draft.plannedExercises);
 
-    this.headerEl.createDiv({ cls: "my-wc-title", text: displayTitle });
-    this.headerEl.createDiv({
+    left.createDiv({ cls: "my-wc-title", text: displayTitle });
+    left.createDiv({
       cls: "my-wc-subtitle",
-      text: `Сегодня: ${formatDateWithWeekdayRu(todayISO)}${
+      text: `${formatDateWithWeekdayRu(todayISO)}${
         this.activeSession
-          ? ` · записано подходов: ${this.activeSession.loggedSets.length}`
-          : " · сборка тренировки на сегодня"
+          ? ` · подходов: ${this.activeSession.loggedSets.length}`
+          : ""
       }`,
     });
+
+    if (this.activeSession) {
+      const session = this.activeSession;
+      const right = this.headerEl.createDiv("my-wc-header-actions");
+
+      const noteBtn = right.createEl("button", {
+        cls: "my-wc-icon-btn",
+        attr: { type: "button", title: "Открыть заметку тренировки" },
+      });
+      setIcon(noteBtn, "file-text");
+      noteBtn.onclick = () => {
+        this.close();
+        void this.app.workspace.openLinkText(session.path, "", false);
+      };
+
+      const finishBtn = right.createEl("button", {
+        cls: "my-wc-btn" + (session.durationMin ? "" : " is-subtle-cta"),
+        text: session.durationMin ? `${session.durationMin} мин` : "Завершить",
+        attr: {
+          type: "button",
+          title: session.durationMin
+            ? "Обновить длительность тренировки"
+            : "Зафиксировать длительность и отметить тренировку в ежедневнике",
+        },
+      });
+      finishBtn.onclick = async () => {
+        finishBtn.disabled = true;
+        try {
+          const dur = computeSessionDurationMinutes(
+            session.startStr,
+            session.durationMin,
+            session.dateISO || todayISO
+          );
+          await this.app.fileManager.processFrontMatter(
+            session.file,
+            (fm: Record<string, unknown>) => {
+              fm[WORKOUT_KEYS.durationMin] = dur;
+            }
+          );
+          await syncWorkoutHabitToDiary(
+            this.app,
+            this.plugin.settings,
+            session.dateISO || todayISO
+          );
+          new Notice(`Тренировка завершена (${dur} мин)`);
+          await this.refreshAll();
+        } catch (err: unknown) {
+          new Notice(
+            "Ошибка завершения: " +
+              (err instanceof Error ? err.message : String(err))
+          );
+          finishBtn.disabled = false;
+        }
+      };
+    }
   }
 
-  private renderTimerSection(draft: SessionDraftState): void {
-    this.timerCardEl.empty();
+  private renderTimerControls(isRunning: boolean): void {
+    if (!this.timerControlsEl) return;
+    this.timerControlsEl.empty();
 
-    const top = this.timerCardEl.createDiv("my-wc-timer-top");
-    const infoCol = top.createDiv("my-wc-timer-info");
-    infoCol.createDiv({ cls: "my-wc-timer-label", text: "Таймер отдыха" });
-    this.timerStatusEl = infoCol.createDiv({
-      cls: "my-wc-timer-status",
-      text: "Готов к запуску",
-    });
-
-    this.timerTimeEl = top.createDiv({
-      cls: "my-wc-timer-digits",
-      text: "00:00",
-    });
-
-    const barTrack = this.timerCardEl.createDiv("my-wc-timer-track");
-    this.timerFillEl = barTrack.createDiv("my-wc-timer-fill");
-
-    const presetsRow = this.timerCardEl.createDiv("my-wc-timer-presets");
+    const todayISO = todayLocalISO();
+    const draft = this.getOrCreateDraft(todayISO);
     const sessionPath = this.activeSession?.path ?? "";
     const curDefault =
       draft.restDurationSec || this.plugin.settings.timer.durationSec || 120;
 
+    if (isRunning) {
+      const add30Btn = this.timerControlsEl.createEl("button", {
+        cls: "my-wc-preset-btn",
+        text: "+30с",
+        attr: { type: "button", title: "Добавить 30 секунд" },
+      });
+      add30Btn.onclick = () => this.plugin.timer.addSeconds(30);
+
+      const resetBtn = this.timerControlsEl.createEl("button", {
+        cls: "my-wc-icon-btn",
+        attr: { type: "button", title: "Сбросить таймер" },
+      });
+      setIcon(resetBtn, "x");
+      resetBtn.onclick = () => this.plugin.timer.reset(curDefault);
+      return;
+    }
+
     for (const sec of REST_PRESETS) {
-      const label = sec % 60 === 0 ? `${sec / 60} мин` : `${sec} с`;
-      const btn = presetsRow.createEl("button", {
+      const label =
+        sec % 60 === 0 ? `${sec / 60}м` : `${(sec / 60).toFixed(1).replace(".", ",")}м`;
+      const btn = this.timerControlsEl.createEl("button", {
         cls: "my-wc-preset-btn" + (curDefault === sec ? " is-active" : ""),
         text: label,
-        attr: { type: "button" },
+        attr: { type: "button", title: `Запустить отдых ${sec} с` },
       });
       btn.onclick = () => {
         draft.restDurationSec = sec;
+        this.plugin.requestSaveSettings();
         this.plugin.timer.start(sessionPath, sec);
-        this.renderTimerSection(draft);
       };
     }
+  }
 
-    const add30Btn = presetsRow.createEl("button", {
-      cls: "my-wc-preset-btn",
-      text: "+30 с",
-      attr: { type: "button", title: "Добавить 30 секунд отдыха" },
-    });
-    add30Btn.onclick = () => {
-      this.plugin.timer.addSeconds(30);
-    };
+  private renderTimerSection(_draft: SessionDraftState): void {
+    this.timerCardEl.empty();
+    this.lastTimerRunning = null;
 
-    const resetBtn = presetsRow.createEl("button", {
-      cls: "my-wc-preset-btn is-muted",
-      text: "Сброс",
-      attr: { type: "button" },
+    const top = this.timerCardEl.createDiv("my-wc-timer-top");
+    const left = top.createDiv("my-wc-timer-left");
+    this.timerTimeEl = left.createDiv({
+      cls: "my-wc-timer-digits",
+      text: "00:00",
     });
-    resetBtn.onclick = () => {
-      this.plugin.timer.reset(curDefault);
-    };
+    this.timerStatusEl = left.createDiv({
+      cls: "my-wc-timer-status",
+      text: "Отдых",
+    });
+
+    this.timerControlsEl = top.createDiv("my-wc-timer-controls");
+
+    const barTrack = this.timerCardEl.createDiv("my-wc-timer-track");
+    this.timerFillEl = barTrack.createDiv("my-wc-timer-fill");
 
     this.updateTimerDisplayDOM(this.plugin.timer.getState(), Date.now());
   }
@@ -320,7 +395,13 @@ export class WorkoutCompanionModal extends Modal {
   private updateTimerDisplayDOM(state: ActiveRestTimerState, now: number): void {
     if (!this.timerTimeEl || !this.timerStatusEl || !this.timerFillEl) return;
 
-    if (state.endAt > now) {
+    const isRunning = state.endAt > now;
+    if (this.lastTimerRunning !== isRunning) {
+      this.lastTimerRunning = isRunning;
+      this.renderTimerControls(isRunning);
+    }
+
+    if (isRunning) {
       const remMs = state.endAt - now;
       const remSec = Math.max(0, Math.ceil(remMs / 1000));
       const totalMs = Math.max(1000, state.durationSec * 1000);
@@ -331,29 +412,24 @@ export class WorkoutCompanionModal extends Modal {
       const endDate = new Date(state.endAt);
       const p = (n: number) => String(n).padStart(2, "0");
       this.timerStatusEl.setText(
-        `Идёт отдых · до ${p(endDate.getHours())}:${p(endDate.getMinutes())}:${p(endDate.getSeconds())}`
+        `до ${p(endDate.getHours())}:${p(endDate.getMinutes())}`
       );
       this.timerFillEl.style.width = `${pct}%`;
       return;
     }
 
     const finishedAt = this.plugin.timer.getLastFinishedBannerEndAt();
-    if (finishedAt > 0 && now - finishedAt < 120_000) {
-      const agoSec = Math.max(0, Math.round((now - finishedAt) / 1000));
+    if (finishedAt > 0 && now - finishedAt < 60_000) {
       this.timerTimeEl.setText("00:00");
       this.timerTimeEl.className = "my-wc-timer-digits is-done";
-      this.timerStatusEl.setText(
-        agoSec >= 3
-          ? `Отдых завершён (${agoSec} с назад) — пора на подход!`
-          : "Отдых завершён — пора на подход!"
-      );
+      this.timerStatusEl.setText("Отдых завершён");
       this.timerFillEl.style.width = "100%";
       return;
     }
 
-    this.timerTimeEl.setText("00:00");
+    this.timerTimeEl.setText(formatSecondsMMSS(state.durationSec || 120));
     this.timerTimeEl.className = "my-wc-timer-digits";
-    this.timerStatusEl.setText(`Выбран отдых: ${state.durationSec || 120} с`);
+    this.timerStatusEl.setText("Отдых");
     this.timerFillEl.style.width = "0%";
   }
 
@@ -375,44 +451,45 @@ export class WorkoutCompanionModal extends Modal {
     void this.refreshAll();
   }
 
-  private renderWorkoutBuilderSection(draft: SessionDraftState): void {
-    const builderCard = this.bodyEl.createDiv("my-wc-builder-card");
+private renderWorkoutBuilderSection(draft: SessionDraftState): void {
+    this.planHostEl.empty();
+    const builderCard = this.planHostEl.createDiv("my-wc-builder-card");
 
     const head = builderCard.createDiv("my-wc-builder-head");
-    const leftTitle = head.createDiv("my-wc-builder-title-wrap");
     const totalPlannedSets = draft.plannedExercises.reduce(
       (acc, e) => acc + e.sets,
       0
     );
-    leftTitle.createSpan({
+    head.createSpan({
       cls: "my-wc-sets-title",
       text:
         draft.plannedExercises.length > 0
-          ? `Список упражнений на сегодня · ${draft.plannedExercises.length} (${totalPlannedSets} подх.)`
-          : "Список упражнений на сегодня",
+          ? `План · ${draft.plannedExercises.length} (${totalPlannedSets} подх.)`
+          : "План на сегодня",
     });
 
-    const headBtns = head.createDiv("my-wc-sets-actions");
     if (draft.plannedExercises.length > 0) {
-      const toggleBuilderBtn = headBtns.createEl("button", {
-        cls: "my-wc-btn" + (this.isBuilderExpanded ? " is-active" : ""),
-        text: this.isBuilderExpanded ? "Свернуть настройку" : "Изменить список",
-        attr: { type: "button" },
+      const toggleBuilderBtn = head.createEl("button", {
+        cls: "my-wc-icon-btn" + (this.isBuilderExpanded ? " is-active" : ""),
+        attr: {
+          type: "button",
+          title: this.isBuilderExpanded ? "Скрыть редактор плана" : "Редактировать план",
+        },
       });
+      setIcon(toggleBuilderBtn, this.isBuilderExpanded ? "check" : "sliders-horizontal");
       toggleBuilderBtn.onclick = () => {
         this.isBuilderExpanded = !this.isBuilderExpanded;
         void this.refreshAll();
       };
     }
 
-    // Активные упражнения сегодняшней тренировки (переключение в 1 тап)
     if (draft.plannedExercises.length > 0) {
       const chipsBar = builderCard.createDiv("my-wc-plan-chips");
       for (const item of draft.plannedExercises) {
         const done = this.countDoneSetsForPlanItem(this.activeSession, item);
         const isCurrent = draft.selectedPlanItemId === item.id;
         const isCompleted = done >= item.sets;
-        const wStr = item.weight > 0 ? ` +${item.weight} кг` : " (свой вес)";
+        const wStr = item.weight > 0 ? ` +${item.weight}` : "";
         const chip = chipsBar.createEl("button", {
           cls:
             "my-wc-plan-chip" +
@@ -429,9 +506,7 @@ export class WorkoutCompanionModal extends Modal {
           draft.selectedExName = item.name;
           draft.customWeight = item.weight;
           draft.restDurationSec = item.rest;
-          if (this.plugin.settings.timer.endAt <= Date.now()) {
-            this.plugin.settings.timer.durationSec = item.rest;
-          }
+          this.plugin.timer.setDefaultDuration(item.rest);
           this.plugin.requestSaveSettings();
           void this.refreshAll();
         };
@@ -440,12 +515,7 @@ export class WorkoutCompanionModal extends Modal {
 
     if (!this.isBuilderExpanded && draft.plannedExercises.length > 0) return;
 
-    // Блок быстрых кнопок: нажми на упражнение, чтобы добавить его в тренировку
     const quickSection = builderCard.createDiv("my-wc-quick-add-box");
-    quickSection.createDiv({
-      cls: "my-wc-quick-add-label",
-      text: "Нажми на упражнение, чтобы добавить в сегодняшнюю тренировку:",
-    });
 
     const quickBtnsWrap = quickSection.createDiv("my-wc-quick-add-btns");
     const quickList = this.plugin.programStore.getQuickExercises();
@@ -559,12 +629,12 @@ export class WorkoutCompanionModal extends Modal {
           void this.refreshAll();
         };
 
-        const rowTools = topBar.createDiv("my-wc-plan-item-tools");
+const rowTools = topBar.createDiv("my-wc-plan-item-tools");
         const upBtn = rowTools.createEl("button", {
-          cls: "my-wc-btn",
-          text: "↑",
-          attr: { type: "button", title: "Переместить выше" },
+          cls: "my-wc-icon-btn",
+          attr: { type: "button", title: "Выше" },
         });
+        setIcon(upBtn, "chevron-up");
         upBtn.disabled = idx === 0;
         upBtn.onclick = () => {
           if (idx <= 0) return;
@@ -576,10 +646,10 @@ export class WorkoutCompanionModal extends Modal {
         };
 
         const downBtn = rowTools.createEl("button", {
-          cls: "my-wc-btn",
-          text: "↓",
-          attr: { type: "button", title: "Переместить ниже" },
+          cls: "my-wc-icon-btn",
+          attr: { type: "button", title: "Ниже" },
         });
+        setIcon(downBtn, "chevron-down");
         downBtn.disabled = idx === draft.plannedExercises.length - 1;
         downBtn.onclick = () => {
           if (idx >= draft.plannedExercises.length - 1) return;
@@ -591,10 +661,10 @@ export class WorkoutCompanionModal extends Modal {
         };
 
         const delBtn = rowTools.createEl("button", {
-          cls: "my-wc-btn",
-          text: "✕ Убрать",
-          attr: { type: "button", title: "Убрать из сегодняшней тренировки" },
+          cls: "my-wc-icon-btn is-danger",
+          attr: { type: "button", title: "Убрать" },
         });
+        setIcon(delBtn, "x");
         delBtn.onclick = () => {
           draft.plannedExercises.splice(idx, 1);
           if (draft.selectedPlanItemId === item.id) {
@@ -700,18 +770,21 @@ export class WorkoutCompanionModal extends Modal {
     }
   }
 
-  private renderBody(todayISO: string, draft: SessionDraftState): void {
-    this.bodyEl.empty();
+private renderBody(todayISO: string, draft: SessionDraftState): void {
+    this.loggerHostEl.empty();
+    this.setsHostEl.empty();
 
-    // 1. Блок списка упражнений на сегодня
     this.renderWorkoutBuilderSection(draft);
 
-    // 2. Если файл сессии за сегодня ещё не создан — кнопка старта
     if (!this.activeSession) {
-      const startBox = this.bodyEl.createDiv("my-wc-empty-box");
+      const startBox = this.loggerHostEl.createDiv("my-wc-empty-box");
+      startBox.createDiv({
+        cls: "my-wc-sets-empty",
+        text: "Собери список упражнений справа или начни свободную тренировку",
+      });
       const startBtn = startBox.createEl("button", {
         cls: "mod-cta my-wc-primary-btn",
-        text: "▶ Начать тренировку",
+        text: "Начать тренировку",
         attr: { type: "button" },
       });
       startBtn.onclick = async () => {
@@ -731,7 +804,7 @@ export class WorkoutCompanionModal extends Modal {
           this.plugin.settings.draftBySession[file.path] = draft;
           delete this.plugin.settings.draftBySession[`date:${todayISO}`];
           this.isBuilderExpanded = false;
-          this.plugin.requestSaveSettings();
+          this.plugin.saveSettingsNow();
           new Notice(`Тренировка начата: ${title}`);
           await this.refreshAll();
         } catch (err: unknown) {
@@ -757,8 +830,7 @@ export class WorkoutCompanionModal extends Modal {
       "Подтягивания";
     const exMeta = getExerciseMeta(selectedExName, this.plugin.programStore);
 
-    // 3. Карточка записи подхода
-    const loggerCard = this.bodyEl.createDiv("my-wc-logger-card");
+    const loggerCard = this.loggerHostEl.createDiv("my-wc-logger-card");
 
     const exRow = loggerCard.createDiv("my-wc-ex-row");
     const exSelect = exRow.createEl("select", {
@@ -834,11 +906,24 @@ export class WorkoutCompanionModal extends Modal {
 
     const steppersGrid = loggerCard.createDiv("my-wc-steppers-grid");
 
-    // 1. Доп. вес (кг)
+// 1. Доп. вес (кг)
     const weightBox = steppersGrid.createDiv("my-wc-stepper-box");
-    weightBox.createDiv({ cls: "my-wc-stepper-label", text: "Доп. вес (кг)" });
-    const wControls = weightBox.createDiv("my-wc-stepper-controls");
+    const wLabelRow = weightBox.createDiv("my-wc-stepper-label-row");
+    wLabelRow.createSpan({ cls: "my-wc-stepper-label", text: "Доп. вес, кг" });
+    if (draft.customWeight > 0) {
+      const zeroLink = wLabelRow.createEl("button", {
+        cls: "my-wc-link-btn",
+        text: "свой вес",
+        attr: { type: "button" },
+      });
+      zeroLink.onclick = () => {
+        draft.customWeight = 0;
+        this.plugin.requestSaveSettings();
+        void this.refreshAll();
+      };
+    }
 
+    const wControls = weightBox.createDiv("my-wc-stepper-controls");
     const wMinusBtn = wControls.createEl("button", {
       cls: "my-wc-step-btn",
       text: "−2",
@@ -860,11 +945,6 @@ export class WorkoutCompanionModal extends Modal {
       text: "+2",
       attr: { type: "button" },
     });
-    const wZeroBtn = wControls.createEl("button", {
-      cls: "my-wc-step-btn is-subtle",
-      text: "0",
-      attr: { type: "button", title: "Свой вес (0 кг)" },
-    });
 
     const applyWeight = (nextW: number) => {
       const clean = Math.max(0, Math.min(500, Math.round(nextW * 2) / 2));
@@ -874,7 +954,6 @@ export class WorkoutCompanionModal extends Modal {
     };
     wMinusBtn.onclick = () => applyWeight((Number(wInput.value) || 0) - 2);
     wPlusBtn.onclick = () => applyWeight((Number(wInput.value) || 0) + 2);
-    wZeroBtn.onclick = () => applyWeight(0);
     wInput.oninput = () => {
       const n = Number(wInput.value.replace(",", "."));
       if (Number.isFinite(n) && n >= 0) {
@@ -885,19 +964,19 @@ export class WorkoutCompanionModal extends Modal {
 
     // 2. Повторения / Секунды
     const repsBox = steppersGrid.createDiv("my-wc-stepper-box");
-    const targetHint = activePlanItem ? ` · цель ${activePlanItem.target}` : "";
-    const progressHint = activePlanItem
-      ? ` · подход ${Math.min(activePlanItem.sets, this.countDoneSetsForPlanItem(session, activePlanItem) + 1)} из ${activePlanItem.sets}`
-      : "";
-    repsBox.createDiv({
+    const rLabelRow = repsBox.createDiv("my-wc-stepper-label-row");
+    rLabelRow.createSpan({
       cls: "my-wc-stepper-label",
-      text:
-        (exMeta.field === "секунды" ? "Секунды" : "Повторения") +
-        targetHint +
-        progressHint,
+      text: exMeta.field === "секунды" ? "Секунды" : "Повторения",
     });
-    const rControls = repsBox.createDiv("my-wc-stepper-controls");
+    if (activePlanItem) {
+      rLabelRow.createSpan({
+        cls: "my-wc-stepper-meta",
+        text: `${Math.min(activePlanItem.sets, this.countDoneSetsForPlanItem(session, activePlanItem) + 1)}/${activePlanItem.sets} · ${activePlanItem.target}`,
+      });
+    }
 
+    const rControls = repsBox.createDiv("my-wc-stepper-controls");
     const rMinusBtn = rControls.createEl("button", {
       cls: "my-wc-step-btn",
       text: "−1",
@@ -919,11 +998,6 @@ export class WorkoutCompanionModal extends Modal {
       text: "+1",
       attr: { type: "button" },
     });
-    const rPlus2Btn = rControls.createEl("button", {
-      cls: "my-wc-step-btn",
-      text: "+2",
-      attr: { type: "button" },
-    });
 
     const applyReps = (nextR: number) => {
       const clean = Math.max(1, Math.min(600, Math.round(nextR)));
@@ -933,7 +1007,6 @@ export class WorkoutCompanionModal extends Modal {
     };
     rMinusBtn.onclick = () => applyReps((Number(rInput.value) || 1) - 1);
     rPlus1Btn.onclick = () => applyReps((Number(rInput.value) || 1) + 1);
-    rPlus2Btn.onclick = () => applyReps((Number(rInput.value) || 1) + 2);
     rInput.oninput = () => {
       const n = Math.round(Number(rInput.value));
       if (Number.isFinite(n) && n >= 1) {
@@ -944,7 +1017,7 @@ export class WorkoutCompanionModal extends Modal {
 
     const submitBtn = loggerCard.createEl("button", {
       cls: "mod-cta my-wc-primary-btn",
-      text: `✓ Записать подход и запустить отдых (${draft.restDurationSec} с)`,
+      text: `Записать подход · отдых ${formatSecondsMMSS(draft.restDurationSec || 120)}`,
       attr: { type: "button" },
     });
 
@@ -1044,106 +1117,86 @@ export class WorkoutCompanionModal extends Modal {
 
     submitBtn.onclick = () => void doSubmitSet();
 
-    // 4. Выполненные подходы за сегодня
-    const setsSection = this.bodyEl.createDiv("my-wc-sets-section");
+// 4. Выполненные подходы за сегодня (сгруппированы по упражнениям)
+    const setsSection = this.setsHostEl.createDiv("my-wc-sets-section");
     const setsHead = setsSection.createDiv("my-wc-sets-head");
     setsHead.createSpan({
       cls: "my-wc-sets-title",
-      text: `Выполнено сегодня · ${session.loggedSets.length}`,
+      text: `Выполнено · ${session.loggedSets.length}`,
     });
-
-    const sessionActions = setsHead.createDiv("my-wc-sets-actions");
-    const openNoteBtn = sessionActions.createEl("button", {
-      cls: "my-wc-btn",
-      text: "📄 Заметка",
-      attr: { type: "button", title: "Открыть файл тренировки" },
-    });
-    openNoteBtn.onclick = () => {
-      this.close();
-      void this.app.workspace.openLinkText(session.path, "", false);
-    };
-
-    const finishBtn = sessionActions.createEl("button", {
-      cls: "my-wc-btn",
-      text: session.durationMin
-        ? `🔄 Обновить время (${session.durationMin} мин)`
-        : "✓ Завершить тренировку",
-      attr: { type: "button" },
-    });
-    finishBtn.onclick = async () => {
-      finishBtn.disabled = true;
-      try {
-        const dur = computeSessionDurationMinutes(
-          session.startStr,
-          session.durationMin,
-          session.dateISO || todayISO
-        );
-        await this.app.fileManager.processFrontMatter(
-          session.file,
-          (fm: Record<string, unknown>) => {
-            fm[WORKOUT_KEYS.durationMin] = dur;
-          }
-        );
-        await syncWorkoutHabitToDiary(
-          this.app,
-          this.plugin.settings,
-          session.dateISO || todayISO
-        );
-        new Notice(`Тренировка завершена (${dur} мин)`);
-        await this.refreshAll();
-      } catch (err: unknown) {
-        new Notice(
-          "Ошибка завершения: " +
-            (err instanceof Error ? err.message : String(err))
-        );
-        finishBtn.disabled = false;
-      }
-    };
 
     if (session.loggedSets.length === 0) {
       setsSection.createDiv({
         cls: "my-wc-sets-empty",
-        text: "Подходов сегодня пока не записано.",
+        text: "Подходов пока нет",
       });
     } else {
-      const totalsByEx = new Map<string, { sum: number; unit: string }>();
+      const grouped = new Map<
+        string,
+        {
+          name: string;
+          weight: number;
+          unit: string;
+          sum: number;
+          items: typeof session.loggedSets;
+        }
+      >();
+
       for (const s of session.loggedSets) {
-        const m = getExerciseMeta(s.name, this.plugin.programStore);
-        const cur = totalsByEx.get(s.name) ?? { sum: 0, unit: m.unit };
-        cur.sum += s.reps;
-        totalsByEx.set(s.name, cur);
-      }
-      const volumeSummary = [...totalsByEx.entries()]
-        .map(([n, v]) => `${n}: ${v.sum} ${v.unit}`)
-        .join(" · ");
-      setsSection.createDiv({
-        cls: "my-wc-volume-summary",
-        text: `Сумма за тренировку: ${volumeSummary}`,
-      });
-
-      const pillsList = setsSection.createDiv("my-wc-sets-list");
-      session.loggedSets.forEach((s, idx) => {
         const meta = getExerciseMeta(s.name, this.plugin.programStore);
-        const wText = s.weight > 0 ? ` +${s.weight} кг` : "";
-        const isPR = this.lastRecordSetLineIndex === s.lineIndex;
-        const pill = pillsList.createDiv(
-          "my-wc-set-pill" + (isPR ? " is-record" : "")
-        );
-        pill.createSpan({
-          text: `${idx + 1}. ${s.name}: ${s.reps} ${meta.unit}${wText}${isPR ? " 🏆" : ""}`,
+        const key = `${s.name}__${s.weight}`;
+        let group = grouped.get(key);
+        if (!group) {
+          group = {
+            name: s.name,
+            weight: s.weight,
+            unit: meta.unit,
+            sum: 0,
+            items: [],
+          };
+          grouped.set(key, group);
+        }
+        group.sum += s.reps;
+        group.items.push(s);
+      }
+
+      const groupsList = setsSection.createDiv("my-wc-groups-list");
+      for (const g of grouped.values()) {
+        const row = groupsList.createDiv("my-wc-group-row");
+        const rowHead = row.createDiv("my-wc-group-head");
+        const nameWrap = rowHead.createDiv("my-wc-group-name");
+        nameWrap.createSpan({ text: g.name });
+        if (g.weight > 0) {
+          nameWrap.createSpan({
+            cls: "my-wc-group-weight",
+            text: `+${g.weight} кг`,
+          });
+        }
+        rowHead.createSpan({
+          cls: "my-wc-group-total",
+          text: `${g.sum} ${g.unit}`,
         });
 
-        const delBtn = pill.createEl("button", {
-          cls: "my-wc-set-del",
-          attr: { type: "button", title: "Удалить этот подход" },
-        });
-        setIcon(delBtn, "x");
-        delBtn.onclick = async () => {
-          delBtn.disabled = true;
-          await deleteSetFromWorkoutFile(this.app, session.file, s.lineIndex);
-          await this.refreshAll();
-        };
-      });
+        const pillsList = row.createDiv("my-wc-sets-list");
+        for (const s of g.items) {
+          const isPR = this.lastRecordSetLineIndex === s.lineIndex;
+          const pill = pillsList.createDiv(
+            "my-wc-set-pill" + (isPR ? " is-record" : "")
+          );
+          pill.createSpan({ text: `${s.reps}${isPR ? " 🏆" : ""}` });
+
+          const delBtn = pill.createEl("button", {
+            cls: "my-wc-set-del",
+            attr: { type: "button", title: "Удалить подход" },
+          });
+          setIcon(delBtn, "x");
+          delBtn.onclick = async () => {
+            delBtn.disabled = true;
+            await deleteSetFromWorkoutFile(this.app, session.file, s.lineIndex);
+            await this.refreshAll();
+          };
+        }
+      }
     }
   }
 }

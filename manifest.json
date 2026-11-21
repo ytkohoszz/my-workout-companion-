@@ -1,9 +1,9 @@
 {
-	"id": "my-workout-companion",
-	"name": "Тренировки и таймер",
-	"version": "0.3.1",
-	"minAppVersion": "1.5.0",
-	"description": "Быстрый терминал сегодняшней тренировки и неубиваемый таймер отдыха для системы «Здоровье»",
-	"author": "Mersinho",
-	"isDesktopOnly": false
+    "id":  "my-workout-companion",
+    "name":  "Тренировки и таймер",
+    "version":  "0.3.2",
+    "minAppVersion":  "1.5.0",
+    "description":  "Быстрый терминал сегодняшней тренировки и неубиваемый таймер отдыха для системы «Здоровье»",
+    "author":  "Mersinho",
+    "isDesktopOnly":  false
 }

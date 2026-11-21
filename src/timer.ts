@@ -6,7 +6,8 @@ export type TimerTickListener = (state: ActiveRestTimerState, now: number) => vo
 
 export class WorkoutRestTimerService {
   private plugin: MyWorkoutCompanionPlugin;
-  private intervalId: number | null = null;
+private intervalId: number | null = null;
+  private finishedBannerTimerId: number | null = null;
   private listeners = new Set<TimerTickListener>();
   private audioCtx: AudioContext | null = null;
   private lastFinishedBannerEndAt = 0;
@@ -47,28 +48,31 @@ export class WorkoutRestTimerService {
       if (!this.audioCtx) {
         this.audioCtx = new Ctx();
       }
-      const ctx = this.audioCtx;
-      if (ctx.state === "suspended") {
-        void ctx.resume();
-      }
-
-      const now = ctx.currentTime;
-      const playTone = (freq: number, startOffset: number, duration: number) => {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = "sine";
-        osc.frequency.setValueAtTime(freq, now + startOffset);
-        gain.gain.setValueAtTime(0.0001, now + startOffset);
-        gain.gain.exponentialRampToValueAtTime(0.18, now + startOffset + 0.02);
-        gain.gain.exponentialRampToValueAtTime(0.0001, now + startOffset + duration);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start(now + startOffset);
-        osc.stop(now + startOffset + duration + 0.02);
+const ctx = this.audioCtx;
+      const scheduleTones = () => {
+        const now = ctx.currentTime;
+        const playTone = (freq: number, startOffset: number, duration: number) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = "sine";
+          osc.frequency.setValueAtTime(freq, now + startOffset);
+          gain.gain.setValueAtTime(0.0001, now + startOffset);
+          gain.gain.exponentialRampToValueAtTime(0.18, now + startOffset + 0.02);
+          gain.gain.exponentialRampToValueAtTime(0.0001, now + startOffset + duration);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(now + startOffset);
+          osc.stop(now + startOffset + duration + 0.02);
+        };
+        playTone(659.25, 0, 0.16); // E5
+        playTone(880.0, 0.18, 0.24); // A5
       };
 
-      playTone(659.25, 0, 0.16); // E5
-      playTone(880.0, 0.18, 0.24); // A5
+      if (ctx.state === "suspended") {
+        void ctx.resume().then(scheduleTones).catch(() => {});
+      } else {
+        scheduleTones();
+      }
     } catch {
       // игнорируем ошибки аудио на заблокированном устройстве
     }
@@ -82,8 +86,16 @@ export class WorkoutRestTimerService {
     return this.lastFinishedBannerEndAt;
   }
 
+private clearFinishedBannerTimer(): void {
+    if (this.finishedBannerTimerId !== null) {
+      window.clearTimeout(this.finishedBannerTimerId);
+      this.finishedBannerTimerId = null;
+    }
+  }
+
   start(sessionPath: string, durationSec: number): void {
     this.unlockAudioOnUserGesture();
+    this.clearFinishedBannerTimer();
     const sec = Math.max(5, Math.round(durationSec));
     const now = Date.now();
     const endAt = now + sec * 1000;
@@ -96,8 +108,16 @@ export class WorkoutRestTimerService {
       durationSec: sec,
       notifiedEndAt: 0,
     };
-    this.plugin.requestSaveSettings();
+    this.plugin.saveSettingsNow();
     this.ensureLoop();
+    this.emitTick();
+  }
+
+  setDefaultDuration(durationSec: number): void {
+    const t = this.plugin.settings.timer;
+    if (t.endAt > Date.now()) return;
+    t.durationSec = Math.max(5, Math.round(durationSec));
+    this.plugin.requestSaveSettings();
     this.emitTick();
   }
 
@@ -109,16 +129,14 @@ export class WorkoutRestTimerService {
       const nextEnd = Math.max(now + 1000, t.endAt + deltaSec * 1000);
       t.endAt = nextEnd;
       t.durationSec = Math.max(5, Math.round((nextEnd - t.startAt) / 1000));
-      this.plugin.requestSaveSettings();
+      this.plugin.saveSettingsNow();
       this.emitTick();
-    } else {
-      const base = Math.max(15, deltaSec > 0 ? deltaSec : t.durationSec || 120);
-      this.start(t.sessionPath, base);
     }
   }
 
   reset(newDefaultDurationSec?: number): void {
     const t = this.plugin.settings.timer;
+    this.clearFinishedBannerTimer();
     this.lastFinishedBannerEndAt = 0;
     this.plugin.settings.timer = {
       sessionPath: t.sessionPath,
@@ -127,7 +145,7 @@ export class WorkoutRestTimerService {
       durationSec: newDefaultDurationSec ?? (t.durationSec || 120),
       notifiedEndAt: t.notifiedEndAt,
     };
-    this.plugin.requestSaveSettings();
+    this.plugin.saveSettingsNow();
     this.stopLoop();
     this.emitTick();
   }
@@ -154,18 +172,24 @@ export class WorkoutRestTimerService {
       } else {
         const finishedEndAt = t.endAt;
         const wasNotified = t.notifiedEndAt === finishedEndAt;
-        this.lastFinishedBannerEndAt = finishedEndAt;
+this.lastFinishedBannerEndAt = finishedEndAt;
         t.endAt = 0;
         t.startAt = 0;
         t.notifiedEndAt = finishedEndAt;
-        this.plugin.requestSaveSettings();
+        this.plugin.saveSettingsNow();
         this.stopLoop();
+        this.clearFinishedBannerTimer();
+        this.finishedBannerTimerId = window.setTimeout(() => {
+          this.finishedBannerTimerId = null;
+          this.lastFinishedBannerEndAt = 0;
+          this.emitTick();
+        }, 60_000);
 
         if (!wasNotified) {
           const overdueSec = Math.max(0, Math.round((now - finishedEndAt) / 1000));
           const suffix =
             overdueSec >= 5 ? ` (${overdueSec} с назад)` : "";
-          new Notice(`⏰ Отдых завершён${suffix} — пора на подход!`);
+          new Notice(`Отдых завершён${suffix} — пора на подход`);
           this.playCompletionChime();
         }
       }
@@ -195,8 +219,9 @@ export class WorkoutRestTimerService {
     }
   }
 
-  destroy(): void {
+destroy(): void {
     this.stopLoop();
+    this.clearFinishedBannerTimer();
     this.listeners.clear();
     if (this.audioCtx) {
       try {

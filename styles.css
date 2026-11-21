@@ -15,19 +15,20 @@
   --my-wc-fs-xs: 0.72rem;
   --my-wc-hit: 36px;
 
-  position: relative;
-  width: min(760px, 96vw) !important;
-  max-width: 760px !important;
+position: relative;
+  width: min(1080px, 95vw) !important;
+  max-width: 1080px !important;
+  height: min(840px, 92vh) !important;
   max-height: 92vh !important;
-  padding: var(--my-wc-s4) !important;
+  padding: 18px 20px !important;
   border-radius: 14px;
   display: flex;
   flex-direction: column;
 }
 
 .modal.my-wc-modal-container > .modal-close-button {
-  top: var(--my-wc-s4);
-  right: var(--my-wc-s3);
+  top: 16px;
+  right: 16px;
   z-index: 10;
 }
 
@@ -36,9 +37,31 @@
   flex-direction: column;
   flex: 1 1 auto;
   min-height: 0;
-  gap: var(--my-wc-s3);
+  gap: 14px;
   outline: none !important;
   overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.my-wc-modal::-webkit-scrollbar {
+  display: none;
+}
+
+.my-wc-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1.08fr) minmax(0, 1fr);
+  gap: 16px;
+  flex: 1 1 auto;
+  min-height: 0;
+  align-items: start;
+}
+
+.my-wc-col-main,
+.my-wc-col-side {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
 }
 
 .my-wc-modal:focus,
@@ -66,55 +89,95 @@
 /* ---------- Шапка ---------- */
 .my-wc-header {
   display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-right: 36px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.my-wc-header-left {
+  display: flex;
   flex-direction: column;
   gap: 2px;
-  padding-right: 36px;
+  min-width: 0;
+}
+
+.my-wc-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 .my-wc-title {
-  font-size: var(--my-wc-fs-lg);
-  font-weight: 600;
+  font-size: 1.08rem;
+  font-weight: 700;
   color: var(--text-normal);
 }
 
 .my-wc-subtitle {
   font-size: var(--my-wc-fs-xs);
   color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+button.my-wc-icon-btn {
+  width: 32px !important;
+  min-width: 32px !important;
+  height: 32px !important;
+  min-height: 32px !important;
+  padding: 0 !important;
+  border-radius: 8px !important;
+  background: var(--background-primary) !important;
+  border: 1px solid var(--background-modifier-border) !important;
+  color: var(--text-muted) !important;
+  box-shadow: none !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer;
+}
+
+button.my-wc-icon-btn:hover,
+button.my-wc-icon-btn.is-active {
+  color: var(--text-normal) !important;
+  border-color: color-mix(in srgb, var(--text-muted) 50%, var(--background-modifier-border)) !important;
+}
+
+button.my-wc-icon-btn.is-danger:hover {
+  color: var(--text-error, #e06c75) !important;
 }
 
 /* ---------- Таймер отдыха ---------- */
 .my-wc-timer-card {
-  padding: var(--my-wc-s3) var(--my-wc-s4);
+  padding: 14px 16px;
   border-radius: 12px;
   background: var(--background-secondary);
   border: 1px solid var(--background-modifier-border);
   display: flex;
   flex-direction: column;
-  gap: var(--my-wc-s2);
+  gap: 10px;
 }
 
 .my-wc-timer-top {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: var(--my-wc-s3);
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
-.my-wc-timer-label {
-  font-size: var(--my-wc-fs-sm);
-  font-weight: 600;
-  color: var(--text-normal);
-}
-
-.my-wc-timer-status {
-  font-size: var(--my-wc-fs-xs);
-  color: var(--text-muted);
-  margin-top: 2px;
+.my-wc-timer-left {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
 }
 
 .my-wc-timer-digits {
-  font-size: 1.85rem;
-  font-weight: 700;
+  font-size: 2rem;
+  font-weight: 750;
   font-variant-numeric: tabular-nums;
   line-height: 1;
   color: var(--text-normal);
@@ -128,8 +191,20 @@
   color: var(--color-green, #4aab80);
 }
 
+.my-wc-timer-status {
+  font-size: var(--my-wc-fs-xs);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.my-wc-timer-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .my-wc-timer-track {
-  height: 6px;
+  height: 4px;
   border-radius: 99px;
   background: var(--background-modifier-border);
   overflow: hidden;
@@ -139,14 +214,6 @@
   height: 100%;
   width: 0%;
   background: var(--color-orange, #e5a158);
-  transition: width 0.22s linear;
-}
-
-.my-wc-timer-presets {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--my-wc-s1);
-  padding-top: 2px;
 }
 
 button.my-wc-preset-btn {
@@ -414,10 +481,40 @@ button.my-wc-quick-ex-btn.is-active {
   border: 1px solid var(--background-modifier-border);
 }
 
+.my-wc-stepper-label-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
 .my-wc-stepper-label {
   font-size: var(--my-wc-fs-xs);
   color: var(--text-muted);
   font-weight: 500;
+}
+
+.my-wc-stepper-meta {
+  font-size: 0.7rem;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+button.my-wc-link-btn {
+  height: auto !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  font-size: 0.7rem !important;
+  color: var(--text-muted) !important;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+button.my-wc-link-btn:hover {
+  color: var(--text-normal) !important;
 }
 
 .my-wc-stepper-controls {
@@ -523,10 +620,55 @@ button.my-wc-btn.is-active {
   color: var(--interactive-accent) !important;
 }
 
+.my-wc-groups-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.my-wc-group-row {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.my-wc-group-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.my-wc-group-name {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: var(--text-normal);
+}
+
+.my-wc-group-weight {
+  font-size: 0.74rem;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.my-wc-group-total {
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
 .my-wc-sets-list {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--my-wc-s2);
+  gap: 6px;
 }
 
 .my-wc-set-pill {
@@ -682,6 +824,21 @@ button.my-wc-set-del:hover {
 @media (prefers-reduced-motion: reduce) {
   .my-wc-timer-fill {
     transition: none !important;
+  }
+}
+
+@media (max-width: 820px) {
+  .my-wc-workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (pointer: coarse), (any-pointer: coarse), (hover: none) {
+  button.my-wc-icon-btn {
+    width: 44px !important;
+    min-width: 44px !important;
+    height: 44px !important;
+    min-height: 44px !important;
   }
 }
 

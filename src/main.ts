@@ -231,7 +231,7 @@ export default class MyWorkoutCompanionPlugin extends Plugin {
     new WorkoutCompanionModal(this.app, this, options).open();
   }
 
-  requestSaveSettings() {
+requestSaveSettings() {
     if (this.saveTimer !== null) window.clearTimeout(this.saveTimer);
     this.saveTimer = window.setTimeout(() => {
       this.saveTimer = null;
@@ -239,10 +239,19 @@ export default class MyWorkoutCompanionPlugin extends Plugin {
     }, 250);
   }
 
+  saveSettingsNow() {
+    if (this.saveTimer !== null) {
+      window.clearTimeout(this.saveTimer);
+      this.saveTimer = null;
+    }
+    void this.saveData(this.settings);
+  }
+
   onunload() {
     if (this.saveTimer !== null) {
       window.clearTimeout(this.saveTimer);
       this.saveTimer = null;
+      void this.saveData(this.settings);
     }
     this.programStore?.flush();
     this.timer?.destroy();

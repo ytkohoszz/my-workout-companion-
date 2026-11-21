@@ -33,7 +33,7 @@ export const DAYS_FULL: readonly string[] = [
   "Воскресенье",
 ];
 
-export const REST_PRESETS: readonly number[] = [60, 90, 120, 150, 180, 210];
+export const REST_PRESETS: readonly number[] = [60, 120, 150, 180];
 
 export type ExerciseFieldKind = "повторы" | "секунды";
 
