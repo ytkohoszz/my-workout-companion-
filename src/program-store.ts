@@ -30,6 +30,10 @@ function sanitizeCatalog(raw: unknown): ExerciseCatalogItem[] {
       name,
       field: isSec ? "секунды" : "повторы",
       unit: isSec ? "с" : "повт.",
+      useWeight:
+        typeof c.useWeight === "boolean"
+          ? c.useWeight
+          : defMatch?.useWeight ?? !isSec,
       defaultWeight:
         typeof c.defaultWeight === "number"
           ? c.defaultWeight
@@ -130,13 +134,17 @@ export class ProgramStore {
 
   addCustomExercise(
     name: string,
-    field: "повторы" | "секунды"
+    field: "повторы" | "секунды",
+    useWeight?: boolean
   ): ExerciseCatalogItem | null {
     const clean = name.replace(/\s+/g, " ").trim();
     if (!clean) return null;
+    const resolvedUseWeight =
+      typeof useWeight === "boolean" ? useWeight : field !== "секунды";
     const existing = this.findExercise(clean);
     if (existing) {
       existing.isQuickBase = true;
+      existing.useWeight = resolvedUseWeight;
       this.requestSave();
       return existing;
     }
@@ -145,6 +153,7 @@ export class ProgramStore {
       name: clean,
       field,
       unit: field === "секунды" ? "с" : "повт.",
+      useWeight: resolvedUseWeight,
       defaultWeight: 0,
       defaultSets: 4,
       defaultTarget: "MAX",
@@ -161,6 +170,15 @@ export class ProgramStore {
     const item = this.findExercise(name);
     if (item) {
       item.isQuickBase = enabled;
+      this.requestSave();
+    }
+  }
+
+  toggleUseWeight(name: string, enabled: boolean): void {
+    const item = this.findExercise(name);
+    if (item) {
+      item.useWeight = enabled;
+      if (!enabled) item.defaultWeight = 0;
       this.requestSave();
     }
   }

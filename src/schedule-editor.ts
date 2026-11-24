@@ -6,6 +6,7 @@ export class CatalogAndTemplatesEditor {
   private hostEl: HTMLElement;
   private newExName = "";
   private newExField: "повторы" | "секунды" = "повторы";
+  private newExUseWeight = true;
 
   constructor(plugin: MyWorkoutCompanionPlugin, hostEl: HTMLElement) {
     this.plugin = plugin;
@@ -45,13 +46,28 @@ export class CatalogAndTemplatesEditor {
       text: "Время (секунды, с)",
     });
     if (this.newExField === "секунды") secOpt.selected = true;
+
+    const addWeightLbl = addRow.createEl("label", {
+      cls: "my-wc-inline-check",
+    });
+    const addWeightChk = addWeightLbl.createEl("input", {
+      attr: { type: "checkbox" },
+    });
+    addWeightChk.checked = this.newExUseWeight;
+    addWeightLbl.createSpan({ text: "Доп. вес" });
+    addWeightChk.onchange = () => {
+      this.newExUseWeight = addWeightChk.checked;
+    };
+
     kindSel.onchange = () => {
       this.newExField = kindSel.value === "секунды" ? "секунды" : "повторы";
+      this.newExUseWeight = this.newExField !== "секунды";
+      addWeightChk.checked = this.newExUseWeight;
     };
 
     const addBtn = addRow.createEl("button", {
       cls: "mod-cta my-wc-btn",
-      text: "＋ Добавить упражнение",
+      text: "+ Добавить",
       attr: { type: "button" },
     });
     addBtn.onclick = () => {
@@ -60,8 +76,14 @@ export class CatalogAndTemplatesEditor {
         new Notice("Введи название упражнения.");
         return;
       }
-      this.plugin.programStore.addCustomExercise(clean, this.newExField);
+      this.plugin.programStore.addCustomExercise(
+        clean,
+        this.newExField,
+        this.newExUseWeight
+      );
       this.newExName = "";
+      this.newExField = "повторы";
+      this.newExUseWeight = true;
       new Notice(`Добавлено упражнение: «${clean}»`);
       this.render();
     };
@@ -83,8 +105,22 @@ export class CatalogAndTemplatesEditor {
 
       row.createSpan({
         cls: "my-wc-set-cat-name",
-        text: `${item.name} · ${item.field} (${item.unit})${item.isCustom ? " · своё" : ""}`,
+        text: `${item.name} · ${item.unit}${item.isCustom ? " · своё" : ""}`,
       });
+
+      const weightLbl = row.createEl("label", {
+        cls: "my-wc-inline-check",
+        attr: { title: "Показывать поле доп. веса для этого упражнения" },
+      });
+      const weightChk = weightLbl.createEl("input", {
+        attr: { type: "checkbox" },
+      });
+      weightChk.checked =
+        item.useWeight !== undefined ? item.useWeight : item.field !== "секунды";
+      weightLbl.createSpan({ text: "Вес" });
+      weightChk.onchange = () => {
+        this.plugin.programStore.toggleUseWeight(item.name, weightChk.checked);
+      };
 
       const delBtn = row.createEl("button", {
         cls: "my-wc-btn",

@@ -41,6 +41,7 @@ export interface ExerciseCatalogItem {
   name: string;
   unit: "повт." | "с";
   field: ExerciseFieldKind;
+  useWeight?: boolean;
   defaultWeight?: number;
   defaultSets?: number;
   defaultTarget?: string;
@@ -135,10 +136,10 @@ export const EXERCISES_CATALOG: readonly ExerciseCatalogItem[] = [
   { name: "Отжимания на кольцах", unit: "повт.", field: "повторы", defaultRest: 150 },
   { name: "Отжимания от пола", unit: "повт.", field: "повторы", defaultRest: 120 },
   { name: "Подъёмы на носки", unit: "повт.", field: "повторы", defaultTarget: "15–20", defaultRest: 75 },
-  { name: "Вис на турнике", unit: "с", field: "секунды", defaultRest: 120 },
-  { name: "Передний вис", unit: "с", field: "секунды", defaultRest: 120 },
-  { name: "Уголок на турнике", unit: "с", field: "секунды", defaultRest: 120 },
-  { name: "Уголок на паралетсах", unit: "с", field: "секунды", defaultRest: 120 },
+  { name: "Вис на турнике", unit: "с", field: "секунды", useWeight: false, defaultRest: 120 },
+  { name: "Передний вис", unit: "с", field: "секунды", useWeight: false, defaultRest: 120 },
+  { name: "Уголок на турнике", unit: "с", field: "секунды", useWeight: false, defaultRest: 120 },
+  { name: "Уголок на паралетсах", unit: "с", field: "секунды", useWeight: false, defaultRest: 120 },
 ];
 
 export function makePlanItemId(): string {

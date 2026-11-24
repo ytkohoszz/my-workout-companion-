@@ -1,6 +1,6 @@
 {
     "name":  "my-workout-companion",
-    "version":  "0.3.3",
+    "version":  "0.3.4",
     "description":  "Рабочий терминал тренировки и таймер отдыха для системы Здоровье",
     "main":  "main.js",
     "scripts":  {

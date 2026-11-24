@@ -49,6 +49,7 @@ export class WorkoutCompanionModal extends Modal {
   private isNewExerciseFormOpen = false;
   private newExNameDraft = "";
   private newExFieldDraft: "повторы" | "секунды" = "повторы";
+  private newExUseWeightDraft = true;
   private lastRecordSetLineIndex: number | null = null;
 
 private headerEl!: HTMLElement;
@@ -435,10 +436,11 @@ private renderHeader(todayISO: string, draft: SessionDraftState): void {
   }
 
   private addExerciseToPlan(draft: SessionDraftState, ex: ExerciseCatalogItem): void {
+    const usesWeight = ex.useWeight !== false && ex.field !== "секунды" ? true : ex.useWeight === true;
     const newItem: PlannedExerciseItem = {
       id: makePlanItemId(),
       name: ex.name,
-      weight: ex.defaultWeight ?? 0,
+      weight: usesWeight ? (ex.defaultWeight ?? 0) : 0,
       sets: ex.defaultSets ?? 4,
       target: ex.defaultTarget ?? "MAX",
       rest: ex.defaultRest ?? 150,
@@ -564,26 +566,44 @@ private renderWorkoutBuilderSection(draft: SessionDraftState): void {
         text: "Время (секунды, с)",
       });
       if (this.newExFieldDraft === "секунды") secOpt.selected = true;
+
+      const weightToggleLabel = customBox.createEl("label", {
+        cls: "my-wc-inline-check",
+      });
+      const weightChk = weightToggleLabel.createEl("input", {
+        attr: { type: "checkbox" },
+      });
+      weightChk.checked = this.newExUseWeightDraft;
+      weightToggleLabel.createSpan({ text: "Доп. вес" });
+      weightChk.onchange = () => {
+        this.newExUseWeightDraft = weightChk.checked;
+      };
+
       kindSel.onchange = () => {
         this.newExFieldDraft =
           kindSel.value === "секунды" ? "секунды" : "повторы";
+        this.newExUseWeightDraft = this.newExFieldDraft !== "секунды";
+        weightChk.checked = this.newExUseWeightDraft;
       };
 
       const saveExBtn = customBox.createEl("button", {
         cls: "mod-cta my-wc-btn",
-        text: "Создать и добавить",
+        text: "Создать",
         attr: { type: "button" },
       });
       saveExBtn.onclick = () => {
         const created = this.plugin.programStore.addCustomExercise(
           this.newExNameDraft,
-          this.newExFieldDraft
+          this.newExFieldDraft,
+          this.newExUseWeightDraft
         );
         if (!created) {
           new Notice("Введи название упражнения.");
           return;
         }
         this.newExNameDraft = "";
+        this.newExFieldDraft = "повторы";
+        this.newExUseWeightDraft = true;
         this.isNewExerciseFormOpen = false;
         this.addExerciseToPlan(draft, created);
         new Notice(`Упражнение «${created.name}» добавлено.`);
@@ -617,8 +637,17 @@ private renderWorkoutBuilderSection(draft: SessionDraftState): void {
         }
         exSel.onchange = () => {
           item.name = exSel.value;
+          const nextMeta = getExerciseMeta(item.name, this.plugin.programStore);
+          const nextUsesWeight =
+            nextMeta.useWeight !== undefined
+              ? nextMeta.useWeight
+              : nextMeta.field !== "секунды";
+          if (!nextUsesWeight) {
+            item.weight = 0;
+          }
           if (draft.selectedPlanItemId === item.id) {
             draft.selectedExName = item.name;
+            if (!nextUsesWeight) draft.customWeight = 0;
           }
           this.plugin.requestSaveSettings();
           void this.refreshAll();
@@ -675,34 +704,40 @@ const rowTools = topBar.createDiv("my-wc-plan-item-tools");
           void this.refreshAll();
         };
 
-        // Нижняя строка карточки: 4 подписанных поля (Доп. вес · Подходов · Цель · Отдых)
-        const fieldsGrid = itemCard.createDiv("my-wc-plan-fields-grid");
+        const itemMeta = getExerciseMeta(item.name, this.plugin.programStore);
+        const itemIsTimed = itemMeta.field === "секунды";
+        const itemUsesWeight =
+          itemMeta.useWeight !== undefined ? itemMeta.useWeight : !itemIsTimed;
 
-        // Поле 1: Вес (кг)
-        const fWeight = fieldsGrid.createEl("label", { cls: "my-wc-labeled-field" });
-        fWeight.createSpan({ cls: "my-wc-field-caption", text: "Вес, кг" });
-        const wInp = fWeight.createEl("input", {
-          cls: "my-wc-field-input",
-          attr: {
-            type: "number",
-            inputmode: "decimal",
-            step: "0.5",
-            min: "0",
-            value: String(item.weight),
-          },
-        });
-        wInp.oninput = () => {
-          const n = Number(wInp.value);
-          if (Number.isFinite(n) && n >= 0) {
-            item.weight = n;
-            if (draft.selectedPlanItemId === item.id) {
-              draft.customWeight = n;
+        const fieldsGrid = itemCard.createDiv(
+          "my-wc-plan-fields-grid" + (itemUsesWeight ? "" : " is-no-weight")
+        );
+
+        if (itemUsesWeight) {
+          const fWeight = fieldsGrid.createEl("label", { cls: "my-wc-labeled-field" });
+          fWeight.createSpan({ cls: "my-wc-field-caption", text: "Вес, кг" });
+          const wInp = fWeight.createEl("input", {
+            cls: "my-wc-field-input",
+            attr: {
+              type: "number",
+              inputmode: "decimal",
+              step: "0.5",
+              min: "0",
+              value: String(item.weight),
+            },
+          });
+          wInp.oninput = () => {
+            const n = Number(wInp.value);
+            if (Number.isFinite(n) && n >= 0) {
+              item.weight = n;
+              if (draft.selectedPlanItemId === item.id) {
+                draft.customWeight = n;
+              }
+              this.plugin.requestSaveSettings();
             }
-            this.plugin.requestSaveSettings();
-          }
-        };
+          };
+        }
 
-        // Поле 2: Подходов
         const fSets = fieldsGrid.createEl("label", { cls: "my-wc-labeled-field" });
         fSets.createSpan({ cls: "my-wc-field-caption", text: "Подходов" });
         const setsInp = fSets.createEl("input", {
@@ -722,14 +757,16 @@ const rowTools = topBar.createDiv("my-wc-plan-item-tools");
           }
         };
 
-        // Поле 3: Цель повторений
         const fTarget = fieldsGrid.createEl("label", { cls: "my-wc-labeled-field" });
-        fTarget.createSpan({ cls: "my-wc-field-caption", text: "Цель" });
+        fTarget.createSpan({
+          cls: "my-wc-field-caption",
+          text: itemIsTimed ? "Цель, с" : "Цель",
+        });
         const targetInp = fTarget.createEl("input", {
           cls: "my-wc-field-input",
           attr: {
             type: "text",
-            placeholder: "MAX",
+            placeholder: itemIsTimed ? "60с / MAX" : "MAX",
             value: item.target,
           },
         });
@@ -842,10 +879,17 @@ private renderBody(todayISO: string, draft: SessionDraftState): void {
       });
       for (const p of draft.plannedExercises) {
         const done = this.countDoneSetsForPlanItem(session, p);
-        const wLabel = p.weight > 0 ? `+${p.weight} кг` : "свой вес";
+        const pMeta = getExerciseMeta(p.name, this.plugin.programStore);
+        const pUsesWeight =
+          pMeta.useWeight !== undefined
+            ? pMeta.useWeight
+            : pMeta.field !== "секунды";
+        const wPart = pUsesWeight
+          ? `${p.weight > 0 ? `+${p.weight} кг` : "свой вес"} · `
+          : "";
         const o = planGroup.createEl("option", {
           value: `plan:${p.id}`,
-          text: `${p.name} (${wLabel} · подход ${done}/${p.sets} · цель ${p.target})`,
+          text: `${p.name} (${wPart}${done}/${p.sets} · ${p.target})`,
         });
         if (activePlanItem && activePlanItem.id === p.id) {
           o.selected = true;
@@ -903,70 +947,79 @@ private renderBody(todayISO: string, draft: SessionDraftState): void {
       );
     }
 
-    const steppersGrid = loggerCard.createDiv("my-wc-steppers-grid");
+    const isTimed = exMeta.field === "секунды";
+    const usesWeight =
+      exMeta.useWeight !== undefined ? exMeta.useWeight : !isTimed;
+    const stepDelta = isTimed ? 5 : 1;
 
-// 1. Доп. вес (кг)
-    const weightBox = steppersGrid.createDiv("my-wc-stepper-box");
-    const wLabelRow = weightBox.createDiv("my-wc-stepper-label-row");
-    wLabelRow.createSpan({ cls: "my-wc-stepper-label", text: "Вес, кг" });
-    if (draft.customWeight > 0) {
-      const zeroLink = wLabelRow.createEl("button", {
-        cls: "my-wc-link-btn",
-        text: "свой вес",
+    const steppersGrid = loggerCard.createDiv(
+      "my-wc-steppers-grid" + (usesWeight ? "" : " is-single")
+    );
+
+    let wInput: HTMLInputElement | null = null;
+    if (usesWeight) {
+      const weightBox = steppersGrid.createDiv("my-wc-stepper-box");
+      const wLabelRow = weightBox.createDiv("my-wc-stepper-label-row");
+      wLabelRow.createSpan({ cls: "my-wc-stepper-label", text: "Вес, кг" });
+      if (draft.customWeight > 0) {
+        const zeroLink = wLabelRow.createEl("button", {
+          cls: "my-wc-link-btn",
+          text: "свой вес",
+          attr: { type: "button" },
+        });
+        zeroLink.onclick = () => {
+          draft.customWeight = 0;
+          this.plugin.requestSaveSettings();
+          void this.refreshAll();
+        };
+      }
+
+      const wControls = weightBox.createDiv("my-wc-stepper-controls");
+      const wMinusBtn = wControls.createEl("button", {
+        cls: "my-wc-step-btn",
+        text: "−2",
         attr: { type: "button" },
       });
-      zeroLink.onclick = () => {
-        draft.customWeight = 0;
+      wInput = wControls.createEl("input", {
+        cls: "my-wc-step-input",
+        attr: {
+          type: "number",
+          inputmode: "decimal",
+          min: "0",
+          max: "500",
+          step: "0.5",
+        },
+      });
+      wInput.value = String(draft.customWeight);
+      const wPlusBtn = wControls.createEl("button", {
+        cls: "my-wc-step-btn",
+        text: "+2",
+        attr: { type: "button" },
+      });
+
+      const applyWeight = (nextW: number) => {
+        const clean = Math.max(0, Math.min(500, Math.round(nextW * 2) / 2));
+        draft.customWeight = clean;
+        if (wInput) wInput.value = String(clean);
         this.plugin.requestSaveSettings();
-        void this.refreshAll();
+      };
+      wMinusBtn.onclick = () => applyWeight((Number(wInput?.value) || 0) - 2);
+      wPlusBtn.onclick = () => applyWeight((Number(wInput?.value) || 0) + 2);
+      wInput.oninput = () => {
+        const n = Number((wInput?.value ?? "").replace(",", "."));
+        if (Number.isFinite(n) && n >= 0) {
+          draft.customWeight = n;
+          this.plugin.requestSaveSettings();
+        }
       };
     }
-
-    const wControls = weightBox.createDiv("my-wc-stepper-controls");
-    const wMinusBtn = wControls.createEl("button", {
-      cls: "my-wc-step-btn",
-      text: "−2",
-      attr: { type: "button" },
-    });
-    const wInput = wControls.createEl("input", {
-      cls: "my-wc-step-input",
-      attr: {
-        type: "number",
-        inputmode: "decimal",
-        min: "0",
-        max: "500",
-        step: "0.5",
-      },
-    });
-    wInput.value = String(draft.customWeight);
-    const wPlusBtn = wControls.createEl("button", {
-      cls: "my-wc-step-btn",
-      text: "+2",
-      attr: { type: "button" },
-    });
-
-    const applyWeight = (nextW: number) => {
-      const clean = Math.max(0, Math.min(500, Math.round(nextW * 2) / 2));
-      draft.customWeight = clean;
-      wInput.value = String(clean);
-      this.plugin.requestSaveSettings();
-    };
-    wMinusBtn.onclick = () => applyWeight((Number(wInput.value) || 0) - 2);
-    wPlusBtn.onclick = () => applyWeight((Number(wInput.value) || 0) + 2);
-    wInput.oninput = () => {
-      const n = Number(wInput.value.replace(",", "."));
-      if (Number.isFinite(n) && n >= 0) {
-        draft.customWeight = n;
-        this.plugin.requestSaveSettings();
-      }
-    };
 
     // 2. Повторения / Секунды
     const repsBox = steppersGrid.createDiv("my-wc-stepper-box");
     const rLabelRow = repsBox.createDiv("my-wc-stepper-label-row");
     rLabelRow.createSpan({
       cls: "my-wc-stepper-label",
-      text: exMeta.field === "секунды" ? "Секунды" : "Повторения",
+      text: isTimed ? "Время, с" : "Повторения",
     });
     if (activePlanItem) {
       rLabelRow.createSpan({
@@ -978,7 +1031,7 @@ private renderBody(todayISO: string, draft: SessionDraftState): void {
     const rControls = repsBox.createDiv("my-wc-stepper-controls");
     const rMinusBtn = rControls.createEl("button", {
       cls: "my-wc-step-btn",
-      text: "−1",
+      text: `−${stepDelta}`,
       attr: { type: "button" },
     });
     const rInput = rControls.createEl("input", {
@@ -991,10 +1044,10 @@ private renderBody(todayISO: string, draft: SessionDraftState): void {
         step: "1",
       },
     });
-    rInput.value = String(draft.draftReps || 10);
+    rInput.value = String(draft.draftReps || (isTimed ? 30 : 10));
     const rPlus1Btn = rControls.createEl("button", {
       cls: "my-wc-step-btn",
-      text: "+1",
+      text: `+${stepDelta}`,
       attr: { type: "button" },
     });
 
@@ -1004,8 +1057,10 @@ private renderBody(todayISO: string, draft: SessionDraftState): void {
       rInput.value = String(clean);
       this.plugin.requestSaveSettings();
     };
-    rMinusBtn.onclick = () => applyReps((Number(rInput.value) || 1) - 1);
-    rPlus1Btn.onclick = () => applyReps((Number(rInput.value) || 1) + 1);
+    rMinusBtn.onclick = () =>
+      applyReps((Number(rInput.value) || stepDelta) - stepDelta);
+    rPlus1Btn.onclick = () =>
+      applyReps((Number(rInput.value) || 0) + stepDelta);
     rInput.oninput = () => {
       const n = Math.round(Number(rInput.value));
       if (Number.isFinite(n) && n >= 1) {
@@ -1029,10 +1084,10 @@ private renderBody(todayISO: string, draft: SessionDraftState): void {
         new Notice("Укажи значение от 1 до 600.");
         return;
       }
-      const weightVal = Math.max(
-        0,
-        Number(String(wInput.value).replace(",", ".")) || 0
-      );
+      const weightVal =
+        usesWeight && wInput
+          ? Math.max(0, Number(String(wInput.value).replace(",", ".")) || 0)
+          : 0;
 
       submitBtn.disabled = true;
       try {
