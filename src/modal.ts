@@ -329,6 +329,7 @@ private renderHeader(todayISO: string, draft: SessionDraftState): void {
   private renderTimerControls(isRunning: boolean): void {
     if (!this.timerControlsEl) return;
     this.timerControlsEl.empty();
+    this.timerControlsEl.toggleClass("is-segmented", !isRunning);
 
     const todayISO = todayLocalISO();
     const draft = this.getOrCreateDraft(todayISO);
@@ -464,8 +465,8 @@ private renderWorkoutBuilderSection(draft: SessionDraftState): void {
       cls: "my-wc-sets-title",
       text:
         draft.plannedExercises.length > 0
-          ? `План · ${draft.plannedExercises.length} (${totalPlannedSets} подх.)`
-          : "План на сегодня",
+          ? `План · ${draft.plannedExercises.length} · ${totalPlannedSets} подх.`
+          : "План",
     });
 
     if (draft.plannedExercises.length > 0) {
@@ -522,7 +523,7 @@ private renderWorkoutBuilderSection(draft: SessionDraftState): void {
     for (const ex of quickList) {
       const b = quickBtnsWrap.createEl("button", {
         cls: "my-wc-quick-ex-btn",
-        text: `＋ ${ex.name}`,
+        text: `+ ${ex.name}`,
         attr: { type: "button" },
       });
       b.onclick = () => this.addExerciseToPlan(draft, ex);
@@ -530,7 +531,7 @@ private renderWorkoutBuilderSection(draft: SessionDraftState): void {
 
     const customExToggleBtn = quickBtnsWrap.createEl("button", {
       cls: "my-wc-quick-ex-btn is-custom" + (this.isNewExerciseFormOpen ? " is-active" : ""),
-      text: "＋ Своё упражнение…",
+      text: "+ Своё",
       attr: { type: "button" },
     });
     customExToggleBtn.onclick = () => {
@@ -589,13 +590,7 @@ private renderWorkoutBuilderSection(draft: SessionDraftState): void {
       };
     }
 
-    // Список добавленных в тренировку упражнений с явными подписями над каждым полем
-    if (draft.plannedExercises.length === 0) {
-      builderCard.createDiv({
-        cls: "my-wc-sets-empty",
-        text: "Список пока пуст — выбери упражнения кнопками выше.",
-      });
-    } else {
+    if (draft.plannedExercises.length > 0) {
       const listEl = builderCard.createDiv("my-wc-plan-cards-list");
       const catalog = this.plugin.programStore.getCatalog();
 
@@ -683,9 +678,9 @@ const rowTools = topBar.createDiv("my-wc-plan-item-tools");
         // Нижняя строка карточки: 4 подписанных поля (Доп. вес · Подходов · Цель · Отдых)
         const fieldsGrid = itemCard.createDiv("my-wc-plan-fields-grid");
 
-        // Поле 1: Доп. вес (кг)
+        // Поле 1: Вес (кг)
         const fWeight = fieldsGrid.createEl("label", { cls: "my-wc-labeled-field" });
-        fWeight.createSpan({ cls: "my-wc-field-caption", text: "Доп. вес (кг)" });
+        fWeight.createSpan({ cls: "my-wc-field-caption", text: "Вес, кг" });
         const wInp = fWeight.createEl("input", {
           cls: "my-wc-field-input",
           attr: {
@@ -729,7 +724,7 @@ const rowTools = topBar.createDiv("my-wc-plan-item-tools");
 
         // Поле 3: Цель повторений
         const fTarget = fieldsGrid.createEl("label", { cls: "my-wc-labeled-field" });
-        fTarget.createSpan({ cls: "my-wc-field-caption", text: "Цель (MAX / 8–10)" });
+        fTarget.createSpan({ cls: "my-wc-field-caption", text: "Цель" });
         const targetInp = fTarget.createEl("input", {
           cls: "my-wc-field-input",
           attr: {
@@ -745,7 +740,7 @@ const rowTools = topBar.createDiv("my-wc-plan-item-tools");
 
         // Поле 4: Отдых (сек)
         const fRest = fieldsGrid.createEl("label", { cls: "my-wc-labeled-field" });
-        fRest.createSpan({ cls: "my-wc-field-caption", text: "Отдых (сек)" });
+        fRest.createSpan({ cls: "my-wc-field-caption", text: "Отдых, с" });
         const restInp = fRest.createEl("input", {
           cls: "my-wc-field-input",
           attr: {
@@ -771,6 +766,7 @@ const rowTools = topBar.createDiv("my-wc-plan-item-tools");
   }
 
 private renderBody(todayISO: string, draft: SessionDraftState): void {
+    this.contentEl.toggleClass("is-session-active", Boolean(this.activeSession));
     this.loggerHostEl.empty();
     this.setsHostEl.empty();
 
@@ -778,10 +774,13 @@ private renderBody(todayISO: string, draft: SessionDraftState): void {
 
     if (!this.activeSession) {
       const startBox = this.loggerHostEl.createDiv("my-wc-empty-box");
-      startBox.createDiv({
-        cls: "my-wc-sets-empty",
-        text: "Собери список упражнений справа или начни свободную тренировку",
-      });
+      if (draft.plannedExercises.length > 0) {
+        const totalSets = draft.plannedExercises.reduce((a, e) => a + e.sets, 0);
+        startBox.createDiv({
+          cls: "my-wc-start-meta",
+          text: `${draft.plannedExercises.length} упр. · ${totalSets} подх.`,
+        });
+      }
       const startBtn = startBox.createEl("button", {
         cls: "mod-cta my-wc-primary-btn",
         text: "Начать тренировку",
@@ -909,7 +908,7 @@ private renderBody(todayISO: string, draft: SessionDraftState): void {
 // 1. Доп. вес (кг)
     const weightBox = steppersGrid.createDiv("my-wc-stepper-box");
     const wLabelRow = weightBox.createDiv("my-wc-stepper-label-row");
-    wLabelRow.createSpan({ cls: "my-wc-stepper-label", text: "Доп. вес, кг" });
+    wLabelRow.createSpan({ cls: "my-wc-stepper-label", text: "Вес, кг" });
     if (draft.customWeight > 0) {
       const zeroLink = wLabelRow.createEl("button", {
         cls: "my-wc-link-btn",
@@ -1125,12 +1124,7 @@ private renderBody(todayISO: string, draft: SessionDraftState): void {
       text: `Выполнено · ${session.loggedSets.length}`,
     });
 
-    if (session.loggedSets.length === 0) {
-      setsSection.createDiv({
-        cls: "my-wc-sets-empty",
-        text: "Подходов пока нет",
-      });
-    } else {
+    if (session.loggedSets.length > 0) {
       const grouped = new Map<
         string,
         {
